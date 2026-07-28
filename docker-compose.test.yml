@@ -98,7 +98,10 @@ services:
 # ─── Volumes ──────────────────────────────────────────────────────────────────
 volumes:
   qfsd_test_mysql_data:
-    driver: local
+    # Reuses the DB volume from the old manual deploy (C:\All Projects\qfsd-forms)
+    # so the CI-driven stack picks up existing data instead of starting empty.
+    external: true
+    name: qfsd-forms_mysql_data
   qfsd_test_server_logs:
     driver: local
 
