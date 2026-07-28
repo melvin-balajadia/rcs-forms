@@ -11,7 +11,7 @@
 #   ./deploy.sh test --build        → force rebuild (passed to compose)
 #
 # Dev? Run locally — no Docker needed:
-#   cd server && npm run dev
+#   cd server && npm start
 #   cd client && npm run dev
 # =============================================================================
 
@@ -55,7 +55,7 @@ Options:
   --build        Force image rebuild (passed to docker compose)
 
 Dev: run locally without Docker
-  cd server && npm run dev
+  cd server && npm start
   cd client && npm run dev
 EOF
   exit 1
