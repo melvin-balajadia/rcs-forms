@@ -1,0 +1,108 @@
+# =============================================================================
+# docker-compose.prod.yml — PRODUCTION
+# Usage: docker compose -f docker-compose.prod.yml up -d --build
+# Client:  https://rcsmqfdform.royalecoldstorage.com.ph:2002
+# Server:  https://rcsmqfdform.royalecoldstorage.com.ph:8087
+# =============================================================================
+
+# Pinned so the DB volume is always the same one, whether deployed by CI
+# (from the runner workspace) or manually (from any clone).
+name: qfsd-prod
+
+services:
+  # ─── Client (Vite/React) ────────────────────────────────────────────────
+  client:
+    build:
+      context: ./client
+      dockerfile: Dockerfile
+      args:
+        VITE_API_URL: https://rcsmqfdform.royalecoldstorage.com.ph:8087
+    image: qfsd-client:prod
+    container_name: qfsd_client_prod
+    restart: unless-stopped
+    volumes:
+      - ./server/certificates:/etc/nginx/certs:ro # SSL certs for client's internal nginx
+    networks:
+      - qfsd_prod_network
+    depends_on:
+      - server
+
+  # ─── Server (Node/Express) ───────────────────────────────────────────────
+  server:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+    image: qfsd-server:prod
+    container_name: qfsd_server_prod
+    restart: unless-stopped
+    env_file:
+      - ./server/.env.prod
+    volumes:
+      - ./server/certificates:/app/certificates:ro # SSL certs (read-only)
+      - qfsd_prod_server_logs:/app/logs # Persistent logs
+    networks:
+      - qfsd_prod_network
+    depends_on:
+      mysql:
+        condition: service_healthy
+    expose:
+      - "8087" # PORT_PROD (NODE_ENV=prod) — internal only, Nginx proxies to this
+
+  # ─── Nginx Reverse Proxy ──────────────────────────────────────────────────
+  nginx:
+    image: nginx:1.27-alpine
+    container_name: qfsd_nginx_prod
+    restart: unless-stopped
+    ports:
+      - "2002:2002" # Client public port
+      - "8087:8087" # Server public port
+    volumes:
+      - ./nginx/nginx.prod.conf:/etc/nginx/nginx.conf:ro
+    networks:
+      - qfsd_prod_network
+    depends_on:
+      - client
+      - server
+
+  # ─── MySQL ────────────────────────────────────────────────────────────────
+  mysql:
+    image: mysql:8.0
+    container_name: qfsd_mysql_prod
+    restart: unless-stopped
+    env_file:
+      - ./server/.env.prod # MYSQL_ROOT_PASSWORD, MYSQL_DATABASE, MYSQL_USER, MYSQL_PASSWORD
+    volumes:
+      - qfsd_prod_mysql_data:/var/lib/mysql
+      - ./mysql-init:/docker-entrypoint-initdb.d:ro # Seed scripts (optional)
+    networks:
+      - qfsd_prod_network
+    ports:
+      - "3309:3306" # Internal only — never expose DB port publicly
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "mysqladmin",
+          "ping",
+          "-h",
+          "localhost",
+          "-u",
+          "root",
+          "--password=$$MYSQL_ROOT_PASSWORD",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+# ─── Volumes ──────────────────────────────────────────────────────────────────
+volumes:
+  qfsd_prod_mysql_data:
+    driver: local
+  qfsd_prod_server_logs:
+    driver: local
+
+# ─── Networks ─────────────────────────────────────────────────────────────────
+networks:
+  qfsd_prod_network:
+    driver: bridge

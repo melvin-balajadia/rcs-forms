@@ -1,0 +1,106 @@
+name: Deploy to Production
+
+on:
+  push:
+    branches: [main]
+  # Do NOT enable workflow_dispatch / pull_request triggers on a self-hosted runner
+  # until branch protection + required reviews are enforced.
+
+# Least-privilege token — we only need to read the repo to deploy.
+permissions:
+  contents: read
+
+# NO concurrency group on purpose. There is a single self-hosted production runner,
+# so it already serializes deploys (one job at a time). A GitHub concurrency group
+# here only deadlocks on Windows: a cancel can't finalize (no live worker to ack it),
+# so the cancelled run stays "in progress" forever and every new run queues behind
+# that ghost and never dispatches. Without a group, a new run goes to the idle runner.
+
+jobs:
+  deploy:
+    name: Deploy Production Stack
+    # SECURITY: This runner MUST be a separate machine from the test runner. A
+    # self-hosted runner executes arbitrary workflow code; co-locating test and prod
+    # runners means a bad test change can reach prod secrets/host.
+    runs-on: [self-hosted, production]
+    environment: production # tracks deployments; enables the required-reviewer approval gate
+    timeout-minutes: 30
+
+    steps:
+      # ── 1. Stop existing containers FIRST (releases Windows file locks) ─────
+      # Call Git bash explicitly (NOT `shell: bash`) — on a Windows runner plain
+      # `bash` resolves to WSL (C:\Windows\System32\bash.exe), which has no distro.
+      # -t 30 bounds the stop so a stubborn container can't hang the whole job.
+      - name: Stop existing containers
+        shell: cmd
+        run: |
+          "C:\Program Files\Git\bin\bash.exe" -c "docker compose -f docker-compose.prod.yml down -t 30 --remove-orphans || true"
+
+      # ── 2. Snapshot current image IDs for rollback (BEFORE the build) ─────
+      # Inspect the IMAGE by tag, not the container: step 1's `down` REMOVES the
+      # containers, but the built images survive. Must run before the build step
+      # overwrites the :prod tag. Path/names MUST match what `deploy.sh --rollback`
+      # reads (ROLLBACK_DIR=C:/deploy_rollback/prod → /c/deploy_rollback/prod).
+      - name: Snapshot current image IDs (for rollback)
+        shell: cmd
+        run: |
+          if not exist "C:\deploy_rollback\prod" mkdir "C:\deploy_rollback\prod"
+          "C:\Program Files\Git\bin\bash.exe" -c "docker image inspect --format='{{.Id}}' qfsd-client:prod 2>/dev/null > /c/deploy_rollback/prod/client_prev.txt || echo none > /c/deploy_rollback/prod/client_prev.txt"
+          "C:\Program Files\Git\bin\bash.exe" -c "docker image inspect --format='{{.Id}}' qfsd-server:prod 2>/dev/null > /c/deploy_rollback/prod/server_prev.txt || echo none > /c/deploy_rollback/prod/server_prev.txt"
+
+      # ── 3. Checkout source ────────────────────────────────────────────────
+      # clean: false — server/certificates/ already lives in this working copy
+      # (git-ignored) and must survive across runs; a default `git clean -ffdx`
+      # would delete it.
+      - name: Checkout source
+        uses: actions/checkout@v4
+        with:
+          clean: false
+
+      # ── 4. Write .env (masked; cleaned up in finally below) ───────────────
+      - name: Create .env.prod
+        shell: powershell
+        run: |
+          $env:ENV_PROD | Set-Content -Path "server\.env.prod" -Encoding UTF8
+        env:
+          ENV_PROD: ${{ secrets.ENV_PROD }}
+
+      # ── 5. Build new images BEFORE touching running containers ────────────
+      - name: Build new images
+        shell: cmd
+        run: |
+          "C:\Program Files\Git\bin\bash.exe" -c "docker compose -f docker-compose.prod.yml build"
+
+      # ── 6. Stop old containers, start new ones ────────────────────────────
+      - name: Deploy prod stack
+        shell: cmd
+        run: |
+          "C:\Program Files\Git\bin\bash.exe" -c "bash deploy.sh prod"
+
+      # ── 7. Verify deployment health ───────────────────────────────────────
+      - name: Verify deployment health
+        shell: cmd
+        run: |
+          timeout /t 20 /nobreak >nul
+          for /f %%i in ('curl.exe -sk --tlsv1.2 -o nul -w "%%{http_code}" https://rcsmqfdform.royalecoldstorage.com.ph:8087/health') do set STATUS=%%i
+          echo Health check returned: %STATUS%
+          if "%STATUS%"=="200" (
+            echo [OK] Server health check passed
+          ) else (
+            echo [ERROR] Health check failed with status: %STATUS%
+            exit /b 1
+          )
+
+      # ── 8. Rollback on any failure ────────────────────────────────────────
+      - name: Rollback on failure
+        if: failure()
+        shell: cmd
+        run: |
+          "C:\Program Files\Git\bin\bash.exe" -c "bash deploy.sh prod --rollback || true"
+
+      # ── 9. ALWAYS remove the .env from the workspace ───────────────────────
+      - name: Cleanup .env file
+        if: always()
+        shell: cmd
+        run: |
+          if exist server\.env.prod (del server\.env.prod && echo [INFO] .env.prod removed from workspace.)

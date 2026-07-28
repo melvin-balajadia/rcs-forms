@@ -1,0 +1,49 @@
+name: CI
+
+on:
+  push:
+    branches: [dev, main]
+  pull_request:
+    branches: [dev, main]
+
+permissions:
+  contents: read
+
+jobs:
+  client:
+    name: Client build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: client
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: client/package-lock.json
+      - run: npm ci
+      # Non-blocking: the codebase currently has ~120 pre-existing lint errors
+      # (mostly @typescript-eslint/no-explicit-any). Flagging here rather than
+      # fixing as part of CI/CD setup — remove continue-on-error once cleaned up.
+      - run: npm run lint
+        continue-on-error: true
+      - run: npm run build
+
+  server:
+    name: Server install
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: server
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 18
+          cache: npm
+          cache-dependency-path: server/package-lock.json
+      - run: npm ci
+      # No test script exists yet (server/package.json's "test" is a stub) —
+      # add a `npm test` step here once real tests land.

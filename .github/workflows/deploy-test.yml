@@ -1,0 +1,88 @@
+name: Deploy to Test
+
+on:
+  push:
+    branches: [dev]
+  # Do NOT enable workflow_dispatch / pull_request triggers on a self-hosted runner
+  # until branch protection + required reviews are enforced.
+
+# Least-privilege token — we only need to read the repo to deploy.
+permissions:
+  contents: read
+
+# NO concurrency group on purpose. There is a single self-hosted test runner, so
+# it already serializes deploys (one job at a time). A GitHub concurrency group
+# here only deadlocks: cancels on this Windows runner never finalize (no live
+# worker to ack them), so cancelled runs stay "in progress" forever and every new
+# run queues behind those ghosts and never dispatches. Without a group, a new run
+# goes straight to the idle runner.
+
+jobs:
+  deploy:
+    name: Deploy Test Stack
+    runs-on: [self-hosted, test]
+    environment: test
+    timeout-minutes: 20
+
+    steps:
+      # ── 1. Stop existing containers FIRST (releases Windows file locks) ─────
+      # Must happen before checkout, or Docker-held locks cause EPERM on checkout.
+      # We call Git bash explicitly (NOT `shell: bash`) because on this runner plain
+      # `bash` resolves to WSL (C:\Windows\System32\bash.exe), which has no distro.
+      # -t 30 bounds the stop so a stubborn container can't hang the whole job.
+      - name: Stop existing containers
+        shell: cmd
+        run: |
+          "C:\Program Files\Git\bin\bash.exe" -c "docker compose -f docker-compose.test.yml down -t 30 --remove-orphans || true"
+
+      # ── 2. Checkout source ────────────────────────────────────────────────
+      # clean: false — server/certificates/ already lives in this working copy
+      # (git-ignored) and must survive across runs; a default `git clean -ffdx`
+      # would delete it.
+      - name: Checkout source
+        uses: actions/checkout@v4
+        with:
+          clean: false
+
+      # ── 3. Write .env (masked; cleaned up in finally below) ────────────────
+      - name: Create .env.test
+        shell: powershell
+        run: |
+          $env:ENV_TEST | Set-Content -Path "server\.env.test" -Encoding UTF8
+        env:
+          ENV_TEST: ${{ secrets.ENV_TEST }}
+
+      # ── 4. Build new images BEFORE touching running containers ────────────
+      - name: Build new images
+        shell: cmd
+        run: |
+          "C:\Program Files\Git\bin\bash.exe" -c "docker compose -f docker-compose.test.yml build"
+
+      # ── 5. Stop existing + start new ──────────────────────────────────────
+      - name: Deploy test stack
+        shell: cmd
+        run: |
+          "C:\Program Files\Git\bin\bash.exe" -c "bash deploy.sh test"
+
+      # ── 6. Verify deployment health ───────────────────────────────────────
+      # deploy.sh already waited 20s and confirmed containers are running; this
+      # is the external HTTPS check through nginx (validates the full public chain).
+      - name: Verify deployment health
+        shell: cmd
+        run: |
+          timeout /t 20 /nobreak >nul
+          for /f %%i in ('curl.exe -sk --tlsv1.2 -o nul -w "%%{http_code}" https://mqfdform.royalecoldstorage.com.ph:8082/health') do set STATUS=%%i
+          echo Health check returned: %STATUS%
+          if "%STATUS%"=="200" (
+            echo [OK] Server health check passed
+          ) else (
+            echo [ERROR] Health check failed with status: %STATUS%
+            exit /b 1
+          )
+
+      # ── 7. ALWAYS remove the .env from the workspace ──────────────────────
+      - name: Cleanup .env file
+        if: always()
+        shell: cmd
+        run: |
+          if exist server\.env.test (del server\.env.test && echo [INFO] .env.test removed.)
