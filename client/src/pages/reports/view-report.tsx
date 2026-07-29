@@ -1,11 +1,20 @@
 import { useNavigate, useParams } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import PageHeader from "@/components/page-header";
 import TextField from "@/components/textfield";
 import Button from "@/components/button";
-import { LuFileChartColumnIncreasing, LuTrendingUp } from "react-icons/lu";
+import {
+  LuFileChartColumnIncreasing,
+  LuTrendingUp,
+  LuFileDown,
+} from "react-icons/lu";
 import { Label } from "@/components/ui/label";
 import { apiGet, apiPost } from "@/services/api";
+import { toast } from "sonner";
+import {
+  exportReportToExcel,
+  type ReportRawAnswerRow,
+} from "@/lib/exportReportToExcel";
 import {
   BarChart,
   Bar,
@@ -96,6 +105,37 @@ export default function ViewReport() {
     enabled: !!report,
   });
 
+  // ✅ Export to Excel — reuses the same shared export logic as create-report
+  const { mutate: exportToExcel, isPending: isExporting } = useMutation({
+    mutationFn: async () => {
+      const res = await apiPost<any>("/reports/raw-answers", {
+        entry_ids: report!.entry_ids,
+      });
+      return res.data as ReportRawAnswerRow[];
+    },
+    onSuccess: (rawAnswers) => {
+      exportReportToExcel({
+        formLabel: report!.form?.form_name || "Unknown Form",
+        site: report!.filter_site,
+        area: report!.filter_area,
+        dateFrom: report!.filter_date_from,
+        dateTo: report!.filter_date_to,
+        entries: entryDetails,
+        rawAnswers,
+      });
+      toast.success("Report exported successfully");
+    },
+    onError: (err: any) => {
+      console.error("Export error:", err);
+      toast.error("Failed to export report", {
+        description:
+          err?.response?.data?.message ||
+          err?.message ||
+          "Something went wrong",
+      });
+    },
+  });
+
   if (isLoading) {
     return (
       <div className="mx-6">
@@ -178,9 +218,19 @@ export default function ViewReport() {
       <div className="bg-white shadow-md p-4 rounded mt-1 space-y-8">
         {/* Phase 1: Report Filters */}
         <div>
-          <h2 className="text-lg font-semibold mb-4 text-gray-700">
-            Report Filters
-          </h2>
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-lg font-semibold text-gray-700">
+              Report Filters
+            </h2>
+            <Button
+              variant="buttonMainNegative"
+              icon={<LuFileDown />}
+              onClick={() => exportToExcel()}
+              disabled={isExporting || entryDetails.length === 0}
+            >
+              {isExporting ? "Exporting..." : "Export to Excel"}
+            </Button>
+          </div>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-x-6 gap-y-6">
             <div className="flex flex-col space-y-2">
               <Label>Report Name</Label>
