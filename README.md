@@ -1,4 +1,4 @@
-# qfsd-forms
+# rcs-forms
 
 A Dockerized deployment setup for the QFSD Forms application (Vite/React client +
 Node/Express server + MySQL) with automated CI/CD via GitHub Actions —
@@ -32,8 +32,8 @@ Install these on your machine:
 ### Step 1 — Clone the repo
 
 ```bash
-git clone https://github.com/melvin-balajadia/marilao-qfsdforms.git
-cd marilao-qfsdforms
+git clone https://github.com/melvin-balajadia/rcs-forms.git
+cd rcs-forms
 ```
 
 ### Step 2 — Switch to the dev branch
@@ -329,17 +329,17 @@ Add-Type -AssemblyName System.IO.Compression.FileSystem
 [System.IO.Compression.ZipFile]::ExtractToDirectory("$PWD\actions-runner.zip", "$PWD")
 
 # TEST VM — one runner, labeled for every site it hosts:
-./config.cmd --url https://github.com/melvin-balajadia/marilao-qfsdforms --token <token> --labels marilao-test,taytay-test --runasservice
+./config.cmd --url https://github.com/melvin-balajadia/rcs-forms --token <token> --labels marilao-test,taytay-test --runasservice
 
 # PRODUCTION VM:
-./config.cmd --url https://github.com/melvin-balajadia/marilao-qfsdforms --token <token> --labels marilao-prod,taytay-prod --runasservice
+./config.cmd --url https://github.com/melvin-balajadia/rcs-forms --token <token> --labels marilao-prod,taytay-prod --runasservice
 ```
 
 > If this VM already runs a runner for another repo (e.g. `smartscan-docker`),
 > use a **separate install folder** — a self-hosted runner on a personal GitHub
 > account is bound to exactly one repo, it can't be shared. Adding a new site
 > to *this* repo later, though, is just adding a label to the *existing*
-> qfsd-forms runner — no new install.
+> rcs-forms runner — no new install.
 >
 > Label names use **hyphens** (`marilao-test`), not underscores
 > (`marilao_test`) — GitHub label matching is a literal string comparison, and
@@ -617,7 +617,7 @@ docker logs qfsd_<site>_server_<env> --tail 50
 
 ```powershell
 net stop actions.runner.<name>
-rd /s /q "C:\actions-runner-qfsd\_work\marilao-qfsdforms"
+rd /s /q "C:\actions-runner-qfsd\_work\rcs-forms"
 net start actions.runner.<name>
 ```
 
