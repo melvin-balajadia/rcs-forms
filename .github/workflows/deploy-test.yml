@@ -10,85 +10,75 @@ on:
 permissions:
   contents: read
 
-# NO concurrency group on purpose. There is a single self-hosted test runner, so
-# it already serializes deploys (one job at a time). A GitHub concurrency group
-# here only deadlocks: cancels on this Windows runner never finalize (no live
-# worker to ack them), so cancelled runs stay "in progress" forever and every new
-# run queues behind those ghosts and never dispatches. Without a group, a new run
-# goes straight to the idle runner.
+# NO concurrency group on purpose. Each site's self-hosted runner already
+# serializes its own deploys (one job at a time on that machine). A GitHub
+# concurrency group here only deadlocks on Windows: a cancel can't finalize (no
+# live worker to ack it), so the cancelled run stays "in progress" forever and
+# every new run queues behind that ghost and never dispatches.
 
 jobs:
+  # One file per site (sites/<site>.conf) drives the matrix below — adding a
+  # new site is "drop in a new .conf file", not a workflow edit.
+  discover-sites:
+    name: Discover sites
+    runs-on: ubuntu-latest
+    outputs:
+      sites: ${{ steps.list.outputs.sites }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: list
+        run: |
+          sites=$(ls sites/*.conf | xargs -n1 basename -s .conf | jq -R -s -c 'split("\n")[:-1]')
+          echo "sites=$sites" >> "$GITHUB_OUTPUT"
+          echo "Discovered sites: $sites"
+
   deploy:
     name: Deploy Test Stack
-    runs-on: [self-hosted, test]
-    environment: test
+    needs: discover-sites
+    strategy:
+      fail-fast: false
+      matrix:
+        site: ${{ fromJSON(needs.discover-sites.outputs.sites) }}
+    runs-on: [self-hosted, "${{ matrix.site }}-test"]
+    environment: "${{ matrix.site }}-test"
     timeout-minutes: 20
 
     steps:
-      # ── 1. Stop existing containers FIRST (releases Windows file locks) ─────
-      # Must happen before checkout, or Docker-held locks cause EPERM on checkout.
-      # We call Git bash explicitly (NOT `shell: bash`) because on this runner plain
-      # `bash` resolves to WSL (C:\Windows\System32\bash.exe), which has no distro.
-      # -t 30 bounds the stop so a stubborn container can't hang the whole job.
+      # ── 1. Stop this site's existing containers FIRST (releases Windows
+      # file locks) — targets purely by project name/label, so it needs no
+      # site config file and can safely run before checkout.
       - name: Stop existing containers
         shell: cmd
         run: |
-          "C:\Program Files\Git\bin\bash.exe" -c "docker compose -f docker-compose.test.yml down -t 30 --remove-orphans || true"
+          "C:\Program Files\Git\bin\bash.exe" -c "docker compose -p qfsd-${{ matrix.site }}-test down -t 30 --remove-orphans || true"
 
       # ── 2. Checkout source ────────────────────────────────────────────────
-      # clean: false — server/certificates/ already lives in this working copy
-      # (git-ignored) and must survive across runs; a default `git clean -ffdx`
-      # would delete it.
+      # clean: false — server/certificates/ (shared wildcard cert, all sites)
+      # is git-ignored and must survive across runs.
       - name: Checkout source
         uses: actions/checkout@v4
         with:
           clean: false
 
-      # ── 3. Write .env (masked; cleaned up in finally below) ────────────────
-      - name: Create .env.test
+      # ── 3. Write this site's .env (masked; cleaned up in finally below) ───
+      - name: Create site .env
         shell: powershell
         run: |
-          $env:ENV_TEST | Set-Content -Path "server\.env.test" -Encoding UTF8
+          $env:SITE_ENV | Set-Content -Path "server\.env.${{ matrix.site }}.test" -Encoding UTF8
         env:
-          ENV_TEST: ${{ secrets.ENV_TEST }}
+          SITE_ENV: ${{ secrets.SITE_ENV }}
 
-      # ── 4. Build new images BEFORE touching running containers ────────────
-      - name: Build new images
+      # ── 4. Build + deploy + verify — all handled by deploy.sh, in the
+      # correct order (snapshot before build, then build+up, then health
+      # check), so there's exactly one place that logic lives.
+      - name: Deploy site stack
         shell: cmd
         run: |
-          "C:\Program Files\Git\bin\bash.exe" -c "docker compose -f docker-compose.test.yml build"
+          "C:\Program Files\Git\bin\bash.exe" -c "bash deploy.sh ${{ matrix.site }} test --build"
 
-      # ── 5. Stop existing + start new ──────────────────────────────────────
-      - name: Deploy test stack
-        shell: cmd
-        run: |
-          "C:\Program Files\Git\bin\bash.exe" -c "bash deploy.sh test"
-
-      # ── 6. Verify deployment health ───────────────────────────────────────
-      # deploy.sh already waited 20s and confirmed containers are running; this
-      # hits the same nginx → server passthrough via localhost rather than the
-      # public domain — the runner lives on this same VM, and curling its own
-      # public hostname depends on the router supporting NAT hairpinning, which
-      # isn't guaranteed. localhost skips DNS/routing but still exercises the
-      # real nginx→server chain on the published port.
-      - name: Verify deployment health
-        shell: cmd
-        run: |
-          rem `timeout` errors out under a non-interactive shell (no console to
-          rem watch for a keypress) — `ping` as a sleep has no such requirement.
-          ping -n 21 127.0.0.1 >nul
-          for /f %%i in ('curl.exe -sk --tlsv1.2 -o nul -w "%%{http_code}" https://localhost:8082/health') do set STATUS=%%i
-          echo Health check returned: %STATUS%
-          if "%STATUS%"=="200" (
-            echo [OK] Server health check passed
-          ) else (
-            echo [ERROR] Health check failed with status: %STATUS%
-            exit /b 1
-          )
-
-      # ── 7. ALWAYS remove the .env from the workspace ──────────────────────
+      # ── 5. ALWAYS remove this site's .env from the workspace ──────────────
       - name: Cleanup .env file
         if: always()
         shell: cmd
         run: |
-          if exist server\.env.test (del server\.env.test && echo [INFO] .env.test removed.)
+          if exist server\.env.${{ matrix.site }}.test (del server\.env.${{ matrix.site }}.test && echo [INFO] .env removed.)

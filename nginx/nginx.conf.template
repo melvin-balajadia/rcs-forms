@@ -1,0 +1,26 @@
+worker_processes auto;
+
+events {
+    worker_connections 1024;
+}
+
+# TLS passthrough — client and server terminate their own HTTPS, this just
+# forwards raw TCP to the right container. ${CLIENT_PORT}/${SERVER_PORT} are
+# substituted by `envsubst` (see the nginx service's entrypoint in the compose
+# files) from this site+env's sites/<site>.conf values — one template serves
+# every site.
+stream {
+    resolver 127.0.0.11 valid=10s;   # Docker's embedded DNS — resolve per-connection instead of once at startup
+
+    server {
+        listen ${CLIENT_PORT};
+        set $client_upstream client:443;
+        proxy_pass $client_upstream;
+    }
+
+    server {
+        listen ${SERVER_PORT};
+        set $server_upstream server:${SERVER_PORT};
+        proxy_pass $server_upstream;
+    }
+}

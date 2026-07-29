@@ -1,0 +1,16 @@
+# One-off override, applied automatically by deploy.sh whenever a file named
+# docker-compose.<site>.<env>.override.yml exists for the site+env being
+# deployed (see deploy.sh). This is marilao/test's pre-existing MySQL volume
+# (from before this repo had per-site/CI-managed deploys) that needs to be
+# reused instead of starting empty. See also docker-compose.marilao.prod.override.yml
+# and docker-compose.taytay.prod.override.yml — both production environments
+# were also already running manually with real data. Only taytay/test is
+# genuinely fresh, with no override file.
+#
+# Targets the base file's static `mysql_data` key (not the resolved Docker
+# volume name) — Compose only interpolates ${VAR} in values, so overriding by
+# key has to use the same literal key the base file declares.
+volumes:
+  mysql_data:
+    external: true
+    name: qfsd-forms_mysql_data

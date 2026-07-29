@@ -1,13 +1,15 @@
 # =============================================================================
-# docker-compose.prod.yml — PRODUCTION
-# Usage: docker compose -f docker-compose.prod.yml up -d --build
-# Client:  https://rcsmqfdform.royalecoldstorage.com.ph:2002
-# Server:  https://rcsmqfdform.royalecoldstorage.com.ph:8087
+# docker-compose.prod.yml — PRODUCTION, shared template across every site
 # =============================================================================
-
-# Pinned so the DB volume is always the same one, whether deployed by CI
-# (from the runner workspace) or manually (from any clone).
-name: qfsd-prod
+# Not run directly with `docker compose up` — always via deploy.sh, which
+# exports SITE/CLIENT_DOMAIN/CLIENT_PORT/SERVER_PORT/MYSQL_PORT (sourced from
+# sites/<site>.conf) and sets the project name with `-p qfsd-<site>-prod`.
+#
+# Note: Compose only interpolates ${VAR} in VALUES, not in mapping keys — so
+# the volumes/networks below keep static internal keys (mysql_data, etc.) and
+# push the actual per-site Docker object name into each one's `name:` field
+# instead of the key itself.
+# =============================================================================
 
 services:
   # ─── Client (Vite/React) ────────────────────────────────────────────────
@@ -16,14 +18,14 @@ services:
       context: ./client
       dockerfile: Dockerfile
       args:
-        VITE_API_URL: https://rcsmqfdform.royalecoldstorage.com.ph:8087
-    image: qfsd-client:prod
-    container_name: qfsd_client_prod
+        VITE_API_URL: https://${CLIENT_DOMAIN}:${SERVER_PORT}
+    image: qfsd-${SITE}-client:prod
+    container_name: qfsd_${SITE}_client_prod
     restart: unless-stopped
     volumes:
-      - ./server/certificates:/etc/nginx/certs:ro # SSL certs for client's internal nginx
+      - ./server/certificates:/etc/nginx/certs:ro # SSL certs for client's internal nginx (shared wildcard cert, all sites)
     networks:
-      - qfsd_prod_network
+      - site_network
     depends_on:
       - server
 
@@ -32,34 +34,43 @@ services:
     build:
       context: ./server
       dockerfile: Dockerfile
-    image: qfsd-server:prod
-    container_name: qfsd_server_prod
+    image: qfsd-${SITE}-server:prod
+    container_name: qfsd_${SITE}_server_prod
     restart: unless-stopped
     env_file:
-      - ./server/.env.prod
+      - ./server/.env.${SITE}.prod
     volumes:
       - ./server/certificates:/app/certificates:ro # SSL certs (read-only)
-      - qfsd_prod_server_logs:/app/logs # Persistent logs
+      - server_logs:/app/logs # Persistent logs
     networks:
-      - qfsd_prod_network
+      - site_network
     depends_on:
       mysql:
         condition: service_healthy
     expose:
-      - "8087" # PORT_PROD (NODE_ENV=prod) — internal only, Nginx proxies to this
+      - "${SERVER_PORT}" # PORT_PROD (NODE_ENV=prod) — internal only, Nginx proxies to this
 
   # ─── Nginx Reverse Proxy ──────────────────────────────────────────────────
   nginx:
     image: nginx:1.27-alpine
-    container_name: qfsd_nginx_prod
+    container_name: qfsd_${SITE}_nginx_prod
     restart: unless-stopped
+    environment:
+      - CLIENT_PORT=${CLIENT_PORT}
+      - SERVER_PORT=${SERVER_PORT}
     ports:
-      - "2002:2002" # Client public port
-      - "8087:8087" # Server public port
+      - "${CLIENT_PORT}:${CLIENT_PORT}" # Client public port
+      - "${SERVER_PORT}:${SERVER_PORT}" # Server public port
     volumes:
-      - ./nginx/nginx.prod.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/nginx.conf.template:/etc/nginx/nginx.conf.template:ro
+    entrypoint:
+      [
+        "sh",
+        "-c",
+        "envsubst '$$CLIENT_PORT $$SERVER_PORT' < /etc/nginx/nginx.conf.template > /etc/nginx/nginx.conf && exec nginx -g 'daemon off;'",
+      ]
     networks:
-      - qfsd_prod_network
+      - site_network
     depends_on:
       - client
       - server
@@ -67,17 +78,17 @@ services:
   # ─── MySQL ────────────────────────────────────────────────────────────────
   mysql:
     image: mysql:8.0
-    container_name: qfsd_mysql_prod
+    container_name: qfsd_${SITE}_mysql_prod
     restart: unless-stopped
     env_file:
-      - ./server/.env.prod # MYSQL_ROOT_PASSWORD, MYSQL_DATABASE, MYSQL_USER, MYSQL_PASSWORD
+      - ./server/.env.${SITE}.prod # MYSQL_ROOT_PASSWORD, MYSQL_DATABASE, MYSQL_USER, MYSQL_PASSWORD
     volumes:
-      - qfsd_prod_mysql_data:/var/lib/mysql
+      - mysql_data:/var/lib/mysql
       - ./mysql-init:/docker-entrypoint-initdb.d:ro # Seed scripts (optional)
     networks:
-      - qfsd_prod_network
+      - site_network
     ports:
-      - "3309:3306" # Internal only — never expose DB port publicly
+      - "${MYSQL_PORT}:3306" # Internal only — never expose DB port publicly
     healthcheck:
       test:
         [
@@ -96,13 +107,16 @@ services:
       start_period: 30s
 
 # ─── Volumes ──────────────────────────────────────────────────────────────────
+# Internal keys stay static; `name:` carries the actual per-site Docker volume
+# name (this IS a value, so ${SITE} substitution applies here).
 volumes:
-  qfsd_prod_mysql_data:
-    driver: local
-  qfsd_prod_server_logs:
-    driver: local
+  mysql_data:
+    name: qfsd_${SITE}_prod_mysql_data
+  server_logs:
+    name: qfsd_${SITE}_prod_server_logs
 
 # ─── Networks ─────────────────────────────────────────────────────────────────
 networks:
-  qfsd_prod_network:
+  site_network:
+    name: qfsd_${SITE}_prod_network
     driver: bridge

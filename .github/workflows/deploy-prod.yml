@@ -10,104 +10,81 @@ on:
 permissions:
   contents: read
 
-# NO concurrency group on purpose. There is a single self-hosted production runner,
-# so it already serializes deploys (one job at a time). A GitHub concurrency group
-# here only deadlocks on Windows: a cancel can't finalize (no live worker to ack it),
-# so the cancelled run stays "in progress" forever and every new run queues behind
-# that ghost and never dispatches. Without a group, a new run goes to the idle runner.
+# NO concurrency group on purpose — see deploy-test.yml for why.
 
 jobs:
+  # One file per site (sites/<site>.conf) drives the matrix below — adding a
+  # new site is "drop in a new .conf file", not a workflow edit.
+  discover-sites:
+    name: Discover sites
+    runs-on: ubuntu-latest
+    outputs:
+      sites: ${{ steps.list.outputs.sites }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: list
+        run: |
+          sites=$(ls sites/*.conf | xargs -n1 basename -s .conf | jq -R -s -c 'split("\n")[:-1]')
+          echo "sites=$sites" >> "$GITHUB_OUTPUT"
+          echo "Discovered sites: $sites"
+
   deploy:
     name: Deploy Production Stack
-    # SECURITY: This runner MUST be a separate machine from the test runner. A
-    # self-hosted runner executes arbitrary workflow code; co-locating test and prod
-    # runners means a bad test change can reach prod secrets/host.
-    runs-on: [self-hosted, production]
-    environment: production # tracks deployments; enables the required-reviewer approval gate
+    needs: discover-sites
+    strategy:
+      fail-fast: false
+      matrix:
+        site: ${{ fromJSON(needs.discover-sites.outputs.sites) }}
+    # SECURITY: this runner MUST be a separate machine from the test runner. A
+    # self-hosted runner executes arbitrary workflow code; co-locating test and
+    # prod runners means a bad test change can reach prod secrets/host.
+    runs-on: [self-hosted, "${{ matrix.site }}-prod"]
+    environment: "${{ matrix.site }}-prod" # tracks deployments; enables the required-reviewer approval gate, per site
     timeout-minutes: 30
 
     steps:
-      # ── 1. Stop existing containers FIRST (releases Windows file locks) ─────
-      # Call Git bash explicitly (NOT `shell: bash`) — on a Windows runner plain
-      # `bash` resolves to WSL (C:\Windows\System32\bash.exe), which has no distro.
-      # -t 30 bounds the stop so a stubborn container can't hang the whole job.
+      # ── 1. Stop this site's existing containers FIRST (releases Windows
+      # file locks) — targets purely by project name/label, so it needs no
+      # site config file and can safely run before checkout.
       - name: Stop existing containers
         shell: cmd
         run: |
-          "C:\Program Files\Git\bin\bash.exe" -c "docker compose -f docker-compose.prod.yml down -t 30 --remove-orphans || true"
+          "C:\Program Files\Git\bin\bash.exe" -c "docker compose -p qfsd-${{ matrix.site }}-prod down -t 30 --remove-orphans || true"
 
-      # ── 2. Snapshot current image IDs for rollback (BEFORE the build) ─────
-      # Inspect the IMAGE by tag, not the container: step 1's `down` REMOVES the
-      # containers, but the built images survive. Must run before the build step
-      # overwrites the :prod tag. Path/names MUST match what `deploy.sh --rollback`
-      # reads (ROLLBACK_DIR=C:/deploy_rollback/prod → /c/deploy_rollback/prod).
-      - name: Snapshot current image IDs (for rollback)
-        shell: cmd
-        run: |
-          if not exist "C:\deploy_rollback\prod" mkdir "C:\deploy_rollback\prod"
-          "C:\Program Files\Git\bin\bash.exe" -c "docker image inspect --format='{{.Id}}' qfsd-client:prod 2>/dev/null > /c/deploy_rollback/prod/client_prev.txt || echo none > /c/deploy_rollback/prod/client_prev.txt"
-          "C:\Program Files\Git\bin\bash.exe" -c "docker image inspect --format='{{.Id}}' qfsd-server:prod 2>/dev/null > /c/deploy_rollback/prod/server_prev.txt || echo none > /c/deploy_rollback/prod/server_prev.txt"
-
-      # ── 3. Checkout source ────────────────────────────────────────────────
-      # clean: false — server/certificates/ already lives in this working copy
-      # (git-ignored) and must survive across runs; a default `git clean -ffdx`
-      # would delete it.
+      # ── 2. Checkout source ────────────────────────────────────────────────
+      # clean: false — server/certificates/ (shared wildcard cert, all sites)
+      # is git-ignored and must survive across runs.
       - name: Checkout source
         uses: actions/checkout@v4
         with:
           clean: false
 
-      # ── 4. Write .env (masked; cleaned up in finally below) ───────────────
-      - name: Create .env.prod
+      # ── 3. Write this site's .env (masked; cleaned up in finally below) ───
+      - name: Create site .env
         shell: powershell
         run: |
-          $env:ENV_PROD | Set-Content -Path "server\.env.prod" -Encoding UTF8
+          $env:SITE_ENV | Set-Content -Path "server\.env.${{ matrix.site }}.prod" -Encoding UTF8
         env:
-          ENV_PROD: ${{ secrets.ENV_PROD }}
+          SITE_ENV: ${{ secrets.SITE_ENV }}
 
-      # ── 5. Build new images BEFORE touching running containers ────────────
-      - name: Build new images
+      # ── 4. Build + deploy + verify — all handled by deploy.sh, in the
+      # correct order (snapshot before build, then build+up, then health
+      # check), so there's exactly one place that logic lives.
+      - name: Deploy site stack
         shell: cmd
         run: |
-          "C:\Program Files\Git\bin\bash.exe" -c "docker compose -f docker-compose.prod.yml build"
+          "C:\Program Files\Git\bin\bash.exe" -c "bash deploy.sh ${{ matrix.site }} prod --build"
 
-      # ── 6. Stop old containers, start new ones ────────────────────────────
-      - name: Deploy prod stack
-        shell: cmd
-        run: |
-          "C:\Program Files\Git\bin\bash.exe" -c "bash deploy.sh prod"
-
-      # ── 7. Verify deployment health ───────────────────────────────────────
-      # Hits localhost rather than the public domain — the runner lives on this
-      # same VM, and curling its own public hostname depends on the router
-      # supporting NAT hairpinning, which isn't guaranteed. localhost skips
-      # DNS/routing but still exercises the real nginx→server chain on the
-      # published port.
-      - name: Verify deployment health
-        shell: cmd
-        run: |
-          rem `timeout` errors out under a non-interactive shell (no console to
-          rem watch for a keypress) — `ping` as a sleep has no such requirement.
-          ping -n 21 127.0.0.1 >nul
-          for /f %%i in ('curl.exe -sk --tlsv1.2 -o nul -w "%%{http_code}" https://localhost:8087/health') do set STATUS=%%i
-          echo Health check returned: %STATUS%
-          if "%STATUS%"=="200" (
-            echo [OK] Server health check passed
-          ) else (
-            echo [ERROR] Health check failed with status: %STATUS%
-            exit /b 1
-          )
-
-      # ── 8. Rollback on any failure ────────────────────────────────────────
+      # ── 5. Rollback on any failure ─────────────────────────────────────────
       - name: Rollback on failure
         if: failure()
         shell: cmd
         run: |
-          "C:\Program Files\Git\bin\bash.exe" -c "bash deploy.sh prod --rollback || true"
+          "C:\Program Files\Git\bin\bash.exe" -c "bash deploy.sh ${{ matrix.site }} prod --rollback || true"
 
-      # ── 9. ALWAYS remove the .env from the workspace ───────────────────────
+      # ── 6. ALWAYS remove this site's .env from the workspace ──────────────
       - name: Cleanup .env file
         if: always()
         shell: cmd
         run: |
-          if exist server\.env.prod (del server\.env.prod && echo [INFO] .env.prod removed from workspace.)
+          if exist server\.env.${{ matrix.site }}.prod (del server\.env.${{ matrix.site }}.prod && echo [INFO] .env removed from workspace.)

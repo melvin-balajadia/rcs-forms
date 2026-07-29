@@ -1,0 +1,13 @@
+# One-off override, applied automatically by deploy.sh whenever a file named
+# docker-compose.<site>.<env>.override.yml exists for the site+env being
+# deployed (see deploy.sh). taytay/prod was already running manually (as
+# qfsdforms_taytay-client/-server/-db) before this pipeline existed, with real
+# production data — this reuses that existing volume instead of starting empty.
+#
+# Targets the base file's static `mysql_data` key (not the resolved Docker
+# volume name) — Compose only interpolates ${VAR} in values, so overriding by
+# key has to use the same literal key the base file declares.
+volumes:
+  mysql_data:
+    external: true
+    name: qfsdforms_taytay_mysql_data
