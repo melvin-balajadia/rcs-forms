@@ -217,21 +217,30 @@ fi
 success "All containers running."
 
 # ─── Health check ──────────────────────────────────────────────────────────────
-# Runs curl INSIDE the nginx container (docker exec), not against the host-
-# published port. On these Windows VMs the GitHub Actions runner executes as a
-# Windows service (Session 0) — Docker Desktop's host port-forwarding proxy is
-# tied to the interactive desktop session, so a service-run curl to
-# 127.0.0.1:<published-port> gets a silent connection refusal even though
-# `docker` CLI commands (build/up/inspect) work fine, since those go through
-# the named-pipe API, not TCP. Execing into the container and curling its own
-# localhost stays entirely inside Docker's network — no host forwarding
-# involved — while still exercising the real nginx → server passthrough.
+# Runs curl INSIDE the nginx container (docker exec) rather than against the
+# host-published port — stays entirely inside Docker's own network, so it
+# can't be affected by host-level networking/forwarding quirks either way.
+#
+# Retries instead of one fixed sleep + single attempt: sequelize.sync() can
+# take a variable amount of time (longer on a fresh database creating every
+# table from scratch), so the app may not be listening yet the instant this
+# runs. Poll until it succeeds or the budget runs out, rather than gambling on
+# one fixed-time snapshot.
 NGINX_CONTAINER="qfsd_${SITE}_nginx_${ENV}"
 info "Verifying health at https://localhost:${SERVER_PORT}/health (inside ${NGINX_CONTAINER}) ..."
-HEALTH_STATUS=$(docker exec "$NGINX_CONTAINER" curl -sk --tlsv1.2 -o /dev/null -w "%{http_code}" "https://localhost:${SERVER_PORT}/health" || echo "000")
-echo "  Health check returned: $HEALTH_STATUS"
+HEALTH_RETRIES=12
+HEALTH_DELAY=10
+HEALTH_STATUS="000"
+for attempt in $(seq 1 "$HEALTH_RETRIES"); do
+  HEALTH_STATUS=$(docker exec "$NGINX_CONTAINER" curl -sk --tlsv1.2 -o /dev/null -w "%{http_code}" "https://localhost:${SERVER_PORT}/health" 2>/dev/null || echo "000")
+  echo "  [attempt ${attempt}/${HEALTH_RETRIES}] Health check returned: $HEALTH_STATUS"
+  if [[ "$HEALTH_STATUS" == "200" ]]; then
+    break
+  fi
+  sleep "$HEALTH_DELAY"
+done
 if [[ "$HEALTH_STATUS" != "200" ]]; then
-  error "Health check failed with status: $HEALTH_STATUS. Check logs:
+  error "Health check failed with status: $HEALTH_STATUS after ${HEALTH_RETRIES} attempts. Check logs:
   docker compose ${COMPOSE_ARGS[*]} logs --tail=50"
 fi
 
