@@ -217,16 +217,18 @@ fi
 success "All containers running."
 
 # ─── Health check ──────────────────────────────────────────────────────────────
-# Hits localhost, not the public domain — this runs on the same VM being
-# tested, and curling its own public hostname depends on the router supporting
-# NAT hairpinning, which isn't guaranteed. localhost still goes through the
-# real nginx → server passthrough on the published port.
-info "Verifying health at https://127.0.0.1:${SERVER_PORT}/health ..."
-# 127.0.0.1, not localhost: some Windows/Docker Desktop setups resolve
-# "localhost" to ::1 (IPv6) first, and if the published port isn't bound on
-# IPv6, that's a silent connection-refused before curl ever reaches the
-# container — 127.0.0.1 removes the ambiguity entirely.
-HEALTH_STATUS=$(curl -sk --tlsv1.2 -o /dev/null -w "%{http_code}" "https://127.0.0.1:${SERVER_PORT}/health" || echo "000")
+# Runs curl INSIDE the nginx container (docker exec), not against the host-
+# published port. On these Windows VMs the GitHub Actions runner executes as a
+# Windows service (Session 0) — Docker Desktop's host port-forwarding proxy is
+# tied to the interactive desktop session, so a service-run curl to
+# 127.0.0.1:<published-port> gets a silent connection refusal even though
+# `docker` CLI commands (build/up/inspect) work fine, since those go through
+# the named-pipe API, not TCP. Execing into the container and curling its own
+# localhost stays entirely inside Docker's network — no host forwarding
+# involved — while still exercising the real nginx → server passthrough.
+NGINX_CONTAINER="qfsd_${SITE}_nginx_${ENV}"
+info "Verifying health at https://localhost:${SERVER_PORT}/health (inside ${NGINX_CONTAINER}) ..."
+HEALTH_STATUS=$(docker exec "$NGINX_CONTAINER" curl -sk --tlsv1.2 -o /dev/null -w "%{http_code}" "https://localhost:${SERVER_PORT}/health" || echo "000")
 echo "  Health check returned: $HEALTH_STATUS"
 if [[ "$HEALTH_STATUS" != "200" ]]; then
   error "Health check failed with status: $HEALTH_STATUS. Check logs:
