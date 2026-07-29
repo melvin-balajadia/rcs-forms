@@ -52,14 +52,25 @@ jobs:
           "C:\Program Files\Git\bin\bash.exe" -c "docker compose -p qfsd-${{ matrix.site }}-prod down -t 30 --remove-orphans || true"
 
       # ── 2. Checkout source ────────────────────────────────────────────────
-      # clean: false — server/certificates/ (shared wildcard cert, all sites)
-      # is git-ignored and must survive across runs.
+      # clean: false as defense-in-depth, but the certs no longer depend on
+      # it surviving — see the restore step below.
       - name: Checkout source
         uses: actions/checkout@v4
         with:
           clean: false
 
-      # ── 3. Write this site's .env (masked; cleaned up in finally below) ───
+      # ── 3. Restore SSL certs from a stable, workspace-independent location ─
+      # server/certificates/ is git-ignored, so it isn't in the checkout at
+      # all. Restoring from C:\qfsdforms-certs (outside the runner's _work
+      # tree) instead of relying on the workspace never being wiped — commands
+      # like `rd /s /q` on a locked workspace (see README Troubleshooting)
+      # would otherwise take the shared cert down with it, for every site.
+      - name: Restore certs
+        shell: cmd
+        run: |
+          xcopy "C:\qfsdforms-certs" "%CD%\server\certificates\" /E /I /Y
+
+      # ── 4. Write this site's .env (masked; cleaned up in finally below) ───
       - name: Create site .env
         shell: powershell
         run: |
@@ -67,7 +78,7 @@ jobs:
         env:
           SITE_ENV: ${{ secrets.SITE_ENV }}
 
-      # ── 4. Build + deploy + verify — all handled by deploy.sh, in the
+      # ── 5. Build + deploy + verify — all handled by deploy.sh, in the
       # correct order (snapshot before build, then build+up, then health
       # check), so there's exactly one place that logic lives.
       - name: Deploy site stack
@@ -75,14 +86,14 @@ jobs:
         run: |
           "C:\Program Files\Git\bin\bash.exe" -c "bash deploy.sh ${{ matrix.site }} prod --build"
 
-      # ── 5. Rollback on any failure ─────────────────────────────────────────
+      # ── 6. Rollback on any failure ─────────────────────────────────────────
       - name: Rollback on failure
         if: failure()
         shell: cmd
         run: |
           "C:\Program Files\Git\bin\bash.exe" -c "bash deploy.sh ${{ matrix.site }} prod --rollback || true"
 
-      # ── 6. ALWAYS remove this site's .env from the workspace ──────────────
+      # ── 7. ALWAYS remove this site's .env from the workspace ──────────────
       - name: Cleanup .env file
         if: always()
         shell: cmd

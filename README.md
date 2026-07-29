@@ -44,30 +44,15 @@ git checkout dev
 
 ### Step 3 — Set up the server
 
-There's no `.env.example` checked in (env files are git-ignored on purpose — they
-hold DB passwords and JWT secrets). Ask a teammate/admin for real values, or use
-the shape below:
-
-```
-NODE_ENV=dev
-PORT_DEV=5003
-PORT_TEST=8082
-PORT_PROD=8087
-MYSQL_HOST=localhost
-MYSQL_USER=your_db_user
-MYSQL_PASSWORD=your_db_password
-MYSQL_DATABASE=your_db_name
-MYSQL_ROOT_PASSWORD=your_root_password
-CLIENT_PORT=1002
-VITE_API_URL=http://localhost:5003
-ACCESS_TOKEN_SECRET=your_secret
-REFRESH_TOKEN_SECRET=your_secret
-```
+`server/.env.example` has the full key shape (git-tracked, no real secrets in
+it) — copy it and fill in real values (ask a teammate/admin, since the actual
+DB password/JWT secrets aren't in git):
 
 ```bash
 cd server
-# create .env with the values above (MYSQL_HOST=localhost if you're running
-# MySQL natively, or point it at whichever site's DB you're working against)
+cp .env.example .env
+# edit .env: real DB credentials, real secrets — MYSQL_HOST=localhost is
+# already correct as-is for local dev, don't change it to `mysql` here
 npm install
 npm start          # runs nodemon index.js — no separate "dev" script exists
 ```
@@ -75,23 +60,21 @@ npm start          # runs nodemon index.js — no separate "dev" script exists
 With no `NODE_ENV` override it defaults to `dev`, which serves plain HTTP on
 `PORT_DEV` — no SSL certs needed for local work at all.
 
+> ⚠️ **`MYSQL_HOST=localhost` is only correct here** (local dev, MySQL running
+> natively on your machine). Every **Docker-deployed** environment (test/prod,
+> any site) needs `MYSQL_HOST=mysql` instead — that's the Compose service name,
+> not a hostname. Mixing these up is a real, easy-to-make mistake (see
+> Troubleshooting) — copying this exact template into a `SITE_ENV` secret
+> without changing this one line will break that deploy.
+
 ### Step 4 — Set up the client (new terminal)
 
 ```bash
 cd client
 npm install
-```
-
-Create `client/.env` with:
-
-```
-VITE_API_URL=http://localhost:5003
-```
-
-(match whatever `PORT_DEV` you set on the server — Vite bakes `VITE_API_URL` in
-at build/dev-server start, it isn't read from the server's `.env`.)
-
-```bash
+cp .env.example .env
+# edit .env: match whatever PORT_DEV you set on the server — Vite bakes
+# VITE_API_URL in at dev-server start, it isn't read from the server's own .env
 npm run dev
 ```
 
@@ -179,7 +162,7 @@ For EACH site, in parallel, on that site's own "<site>-test"-labeled runner:
         ↓
     bash deploy.sh <site> test --build
         → snapshots current images, stops old, builds + starts new,
-          confirms all 4 containers "running", curls https://localhost:<port>/health
+          confirms all 4 containers "running", then health-checks (see below)
         ↓
     Delete .env.<site>.test from disk (always, even on failure)
 ```
@@ -191,12 +174,19 @@ Same shape as test, on each site's `<site>-prod` runner label and
 prod --rollback` runs automatically if the deploy step fails (image
 snapshot/rollback logic lives inside `deploy.sh`, not the workflow).
 
-> **Why does the health check hit `localhost` and not the public domain?**
-> It runs *on the same VM* it's testing. Curling its own public hostname
-> depends on the router supporting NAT hairpinning, which isn't guaranteed —
-> `localhost` still goes through the real nginx → server passthrough on the
-> published port, it just skips the DNS/routing round trip that can fail from
-> inside the same network.
+### The health check, and why it works the way it does
+
+`deploy.sh` verifies the deploy by running `curl` **inside the nginx container**
+(`docker exec qfsd_<site>_nginx_<env> curl ... https://localhost:<port>/health`),
+not against the host-published port. This exercises the real nginx → server
+passthrough while staying entirely inside Docker's own network — it doesn't
+depend on anything about how the host machine's networking is set up.
+
+It also **retries** — up to 12 attempts, 10s apart — instead of one fixed sleep
++ single check. `sequelize.sync()` can take a variable amount of time (longer
+on a fresh database creating every table from scratch), so the app may not be
+listening yet the instant the first attempt runs; retrying avoids failing a
+perfectly good deploy just because it was checked a few seconds too early.
 
 ---
 
@@ -208,9 +198,11 @@ This is the entire process — no workflow YAML edits required:
    that site's test/prod domains, client/server ports, and a MySQL host port
    that doesn't collide with any other site or app already running on the same
    VMs (`docker ps` / check `sites/*.conf` for what's taken).
-2. **Create GitHub Environments** `<newsite>-test` and `<newsite>-prod**`
+2. **Create GitHub Environments** `<newsite>-test` and `<newsite>-prod`
    (Settings → Environments), each with a `SITE_ENV` secret holding that
-   site+env's `.env` contents.
+   site+env's `.env` contents — double-check `MYSQL_HOST=mysql` and
+   `PORT_TEST`/`PORT_PROD` match that site's `.conf` (see Troubleshooting —
+   both have caused real deploy failures).
 3. **Add runner labels** `<newsite>-test` / `<newsite>-prod` to whichever
    physical runners should host it (Settings → Actions → Runners → click a
    runner → Labels).
@@ -218,6 +210,39 @@ This is the entire process — no workflow YAML edits required:
    subdomain, `server/certificates/` (already there) covers it, nothing to do.
    A genuinely different domain would need its own cert added there instead.
 5. Push to `dev` — the new site appears in the next deploy's matrix automatically.
+
+---
+
+## Managing a change that should apply to only one site
+
+Since every site deploys from the same commit, a code change on `dev`/`main`
+reaches **every** site at once — there's no per-site branch or fork. For a
+difference that should only apply to one site, keep the one codebase and drive
+the difference from config instead:
+
+- **A config value or limit** — add it to that one site's `.env` (its
+  `SITE_ENV` secret) and read it in code (`process.env.WHATEVER`). Already the
+  pattern used for DB credentials, ports, and domains.
+- **Something frontend-facing** (logo, display name, a UI toggle) — follow the
+  existing precedent: `VITE_API_URL` is already a per-site build arg in
+  `docker-compose.test.yml`/`.prod.yml`. Add a new one (`VITE_SITE_NAME`, etc.)
+  the same way, set differently per site in `sites/<site>.conf`, read via
+  `import.meta.env.VITE_SITE_NAME` in the client.
+- **A different code path or business rule** — gate it behind a flag read from
+  that site's `.env` (`if (process.env.FEATURE_X_ENABLED === "true")`) rather
+  than forking the repo. The same commit still builds and deploys everywhere;
+  only the site whose `.env` sets the flag actually behaves differently.
+
+**Known gap**: nothing inside the running app currently knows *which site it
+is* — `SITE` only exists at the Compose/shell level for naming containers and
+volumes, it's never passed into the container itself. If code needs to branch
+on "am I Taytay or Marilao" specifically (not just on a feature flag), add
+`SITE=<site>` as an explicit line in each site's `.env`, or thread `${SITE}`
+through as a proper `environment:` entry in the compose files.
+
+**Don't**: branch-per-site or fork-per-site. That reintroduces exactly the
+problem this pipeline was built to avoid — every future fix needing to be
+re-applied N times instead of landing once.
 
 ---
 
@@ -315,6 +340,11 @@ Add-Type -AssemblyName System.IO.Compression.FileSystem
 > account is bound to exactly one repo, it can't be shared. Adding a new site
 > to *this* repo later, though, is just adding a label to the *existing*
 > qfsd-forms runner — no new install.
+>
+> Label names use **hyphens** (`marilao-test`), not underscores
+> (`marilao_test`) — GitHub label matching is a literal string comparison, and
+> this exact mismatch has caused a job to sit "Waiting for a runner" forever
+> before. Double-check after adding.
 
 4. Verify it shows **Idle (green)** under Settings → Actions → Runners, with
    every label (`<site>-test` or `<site>-prod`) the corresponding matrix job
@@ -324,31 +354,36 @@ Add-Type -AssemblyName System.IO.Compression.FileSystem
 
 Certs are **not** stored in the repo (git-ignored). Every site currently in
 this repo shares one wildcard cert (`*.royalecoldstorage.com.ph`), so this is
-a one-time setup regardless of how many sites are deployed here — placed
-inside **the runner's own checkout**, not wherever you might have manually
-cloned the repo before:
+a one-time setup regardless of how many sites are deployed here.
+
+Place them at a **stable location outside the runner's workspace**, not inside
+the repo checkout:
 
 ```
-C:\actions-runner-qfsd\_work\marilao-qfsdforms\marilao-qfsdforms\server\certificates\
+C:\qfsdforms-certs\
 ├── server.crt   ← leaf cert
 ├── inter.crt    ← intermediate chain
 └── cert.key     ← private key
 ```
 
+Both `deploy-test.yml` and `deploy-prod.yml` have a **Restore certs** step
+(`xcopy "C:\qfsdforms-certs" "%CD%\server\certificates\" /E /I /Y`) that copies
+these into the checkout at the start of every run — so the certs survive even
+if the runner's `_work` folder gets deleted and recreated (e.g. the
+"workspace is locked" fix in Troubleshooting, which otherwise would have taken
+the shared cert down with it, for every site). This location is independent of
+which VM, which install folder, or which repo checkout path is in use — set it
+up once per VM and every site's every deploy picks it up automatically.
+
 If you only have a merged/full-chain bundle (leaf + intermediates + root
-concatenated into one file), split it back into the three pieces above:
+concatenated into one file), split it back into the three pieces above before
+placing them in `C:\qfsdforms-certs\`:
 
 ```bash
 awk '/BEGIN CERTIFICATE/{n++} {print > ("block"n".crt")}' cert.crt
 mv block1.crt server.crt              # leaf
 cat block2.crt block3.crt > inter.crt # intermediate chain (drop the self-signed root block)
 ```
-
-The `_work\<repo>\<repo>` folder only gets created after the runner's first
-checkout ever runs — you can create the nested path yourself ahead of time and
-drop the certs in before the first push, or let the first run fail on a missing
-cert and place them afterward (`clean: false` on checkout means they'll persist
-for every run after that).
 
 ### Step 5 — Add GitHub Environments + Secrets (per site, per env)
 
@@ -357,11 +392,15 @@ for every run after that).
 2. Each environment → **Environment secrets** → add `SITE_ENV` (full contents of
    what should become `server/.env.<site>.<env>`).
 
-Use the key shape shown in the *Local Setup* section above, with these two
-values **must match that site's `sites/<site>.conf` exactly**:
+Use `server/.env.example` as the starting point — copy it, fill in real
+values, paste the whole thing as the `SITE_ENV` secret's value. **Two values
+have already caused real failed deploys** — check these carefully (also
+flagged inline in `.env.example` itself):
 
-- `server/.env.<site>.test` → `PORT_TEST` = that site's `TEST_SERVER_PORT`
-- `server/.env.<site>.prod` → `PORT_PROD` = that site's `PROD_SERVER_PORT`
+| Value | Must be | Why |
+|---|---|---|
+| `MYSQL_HOST` | `mysql` (never `localhost`) | `localhost` inside a container means "this container," not the database — connection refused every time. The Local Setup template above uses `localhost` on purpose (that's for native local dev), don't carry that value over into a `SITE_ENV` secret. |
+| `PORT_TEST` / `PORT_PROD` | exactly that site's `TEST_SERVER_PORT` / `PROD_SERVER_PORT` from `sites/<site>.conf` | nginx routes to the app on this port; if the app is actually listening on a different one (e.g. a copy-pasted default), nginx's upstream connection is refused and the health check fails even though every container shows "running." |
 
 > ⚠️ No trailing spaces after any line — Docker will reject the variable and
 > the container fails to start.
@@ -438,6 +477,17 @@ script changes needed. Then stop the old stack (`docker compose down` — **no**
 `-v`, that deletes volumes) to free its ports before the new stack tries to
 bind them.
 
+> ⚠️ **These override files need to stay forever**, not just for a transition
+> period. They're a permanent bridge between the CI-managed compose project and
+> a volume that already existed under a different name — the underlying Docker
+> volume never renames itself to match the new convention. Removing the
+> override later would make Compose silently create a **new, empty** volume
+> under the standard name instead of reattaching to the real data — it would
+> look exactly like everything vanished. The only way to retire one is a
+> deliberate one-time migration (create a volume under the standard name, copy
+> the data across, verify, then remove the override) — optional cleanup, not
+> something that happens on its own.
+
 ---
 
 ## Useful Docker Commands
@@ -462,6 +512,9 @@ docker exec -it qfsd_taytay_mysql_test sh
 # Connect to MySQL
 docker exec -it qfsd_marilao_mysql_test mysql -u root -p
 
+# Manually re-run the same health check deploy.sh does
+docker exec qfsd_marilao_nginx_test curl -sk --tlsv1.2 -o /dev/null -w "%{http_code}\n" https://localhost:8082/health
+
 # Stop everything for a site
 docker compose -p qfsd-marilao-test -f docker-compose.test.yml down
 docker compose -p qfsd-taytay-prod -f docker-compose.prod.yml down
@@ -485,15 +538,40 @@ bash deploy.sh   # prints usage + lists everything under sites/*.conf
 
 The runner is either offline, or its labels don't match `runs-on:` for that
 site (`self-hosted` + `<site>-test`, or `self-hosted` + `<site>-prod`). Check
-**Settings → Actions → Runners** for status and labels. If you add/fix a label
-*after* a job is already queued, cancel that run and re-trigger — the
-scheduler doesn't always re-check an already-queued job against a newly added
-label.
+**Settings → Actions → Runners** for status and labels — including whether the
+label is hyphenated correctly (`marilao-test`, not `marilao_test`; GitHub
+matches labels as literal strings). If you add/fix a label *after* a job is
+already queued, cancel that run and re-trigger — the scheduler doesn't always
+re-check an already-queued job against a newly added label.
 
 ```powershell
 Get-Service actions.runner.*
 Start-Service "actions.runner.<name>"
 ```
+
+### Container keeps restarting / `ECONNREFUSED ::1:3306` in server logs
+
+`MYSQL_HOST` in that site's `SITE_ENV` secret is set to `localhost` instead of
+`mysql`. Inside a container, `localhost` means "this container," not the
+database — the app tries to connect to itself and fails. Fix the secret's
+`MYSQL_HOST` value, re-run the job (no push needed, secrets are read fresh on
+each run).
+
+### Health check fails, but the server logs show it started fine
+
+(`docker logs qfsd_<site>_server_<env>` shows a successful DB connection and
+"Test/Production server running" — the app itself is fine.)
+
+Check the **nginx** container's logs instead:
+```bash
+docker logs qfsd_<site>_nginx_<env> --tail 50
+```
+If you see `connect() failed (111: Connection refused) ... upstream:
+"<ip>:<port>"` — nginx is trying to reach the app on a port nothing's actually
+listening on. This means `PORT_TEST`/`PORT_PROD` in that site's `SITE_ENV`
+secret doesn't match `SERVER_PORT` in `sites/<site>.conf` (nginx routes using
+the `.conf` value; the app binds using `PORT_TEST`/`PORT_PROD` — these have to
+agree). Fix the secret, re-run.
 
 ### `502 Bad Gateway` — server container crashed
 
@@ -524,21 +602,16 @@ docker compose -p qfsd-<site>-prod -f docker-compose.prod.yml down --remove-orph
 
 Then re-run the workflow from the Actions tab.
 
-### One site's health check fails but containers show "running"
+### Health check fails after several retries, containers all show "running" the whole time
 
-`deploy.sh` already confirms containers are running before it curls
-`/health` — so a health-check failure with everything "running" usually means
-the app crashed just after that check, or (curl exit code `000`) a DNS/NAT
-problem. Confirm from an **external** device (not the VM itself):
+`deploy.sh`'s health check retries up to 12 times (10s apart) precisely because
+`sequelize.sync()` can be slow on a fresh database — if it's still failing
+after all 12 attempts, that's no longer a timing issue. Get the actual error:
 
 ```bash
-curl -sk https://mqfdform.royalecoldstorage.com.ph:8082/health
-curl -sk https://tqfdform.royalecoldstorage.com.ph:8084/health
+docker exec qfsd_<site>_nginx_<env> curl -sk --tlsv1.2 -v https://localhost:<port>/health
+docker logs qfsd_<site>_server_<env> --tail 50
 ```
-
-If that also fails, check `docker logs qfsd_<site>_server_<env> --tail 50`. If
-it succeeds, the deploy is actually fine — it's a NAT-hairpin limitation of
-hitting `localhost` from that same box, not the app.
 
 ### Runner workspace is locked / access denied
 
@@ -549,7 +622,9 @@ net start actions.runner.<name>
 ```
 
 Then retrigger the deploy (this affects every site's next run on that runner,
-since the workspace is shared — not per-site).
+since the workspace is shared — not per-site). Safe to do — the shared cert
+lives in `C:\qfsdforms-certs\`, outside this folder, and gets restored back
+into the fresh workspace automatically on the next run.
 
 ### CORS errors in the browser
 
@@ -595,7 +670,8 @@ accidentally sharing a port — check `sites/*.conf` for duplicate
 - **No Compose-level `healthcheck:` blocks** on the `client`/`server`/`nginx`
   services (only `mysql` has one) — `deploy.sh`'s post-deploy check only
   confirms containers are *running*, not passing an internal health probe. Its
-  own curl to `/health` is the real correctness check.
+  own retrying curl (via `docker exec`) to `/health` is the real correctness
+  check.
 - **Client lint has ~120 pre-existing errors** (mostly
   `@typescript-eslint/no-explicit-any`) — `ci.yml` runs lint with
   `continue-on-error: true` so it doesn't block merges; worth a cleanup pass
@@ -606,3 +682,7 @@ accidentally sharing a port — check `sites/*.conf` for duplicate
   doesn't cancel other sites' — intentional, but it also means a partially-
   failed push across sites needs a human to notice and reconcile which sites
   are now on which commit.
+- **No `SITE` variable inside the running app container** — the app currently
+  has no way to know which site it's deployed for except indirectly through
+  its own `.env` values. See *Managing a change that should apply to only one
+  site* above if code ever needs to branch on site identity directly.
