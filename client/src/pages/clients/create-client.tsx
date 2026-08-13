@@ -5,6 +5,8 @@ import { LuUserPlus } from "react-icons/lu";
 import TextField from "@/components/textfield";
 import Dropdown from "@/components/dropdown";
 import Button from "@/components/button";
+import { useCreate } from "@/services/useCrud";
+import { toast } from "sonner";
 
 export default function CreateClient() {
   const navigate = useNavigate();
@@ -16,16 +18,34 @@ export default function CreateClient() {
     navigate("/clients");
   };
 
+  const createClientMutation = useCreate<{ message: string }>(
+    ["clients"],
+    "/clients/create",
+    () => {
+      toast.success("Client created successfully!");
+      navigate("/clients");
+    },
+  );
+
   const handleSubmit = () => {
-    console.log({ clientName, clientDescription, site });
+    if (!clientName || !clientDescription || !site) {
+      toast.warning("Please fill out all fields.");
+      return;
+    }
+
+    createClientMutation.mutate({
+      clients_name: clientName,
+      clients_description: clientDescription,
+      clients_site: site,
+    });
   };
 
   const siteOptions = [
-    { label: "Taytay", value: "taytay" },
-    { label: "Marilao", value: "marilao" },
-    { label: "Plaridel", value: "plaridel" },
-    { label: "Cabuyao", value: "cabuyao" },
-    { label: "Villasis", value: "villasis" },
+    { label: "Taytay", value: "Taytay" },
+    { label: "Marilao", value: "Marilao" },
+    { label: "Plaridel", value: "Plaridel" },
+    { label: "Cabuyao", value: "Cabuyao" },
+    { label: "Villasis", value: "Villasis" },
   ];
 
   return (
@@ -70,8 +90,12 @@ export default function CreateClient() {
           </div>
         </div>
         <div className="flex justify-end mt-6">
-          <Button variant="buttonMain" onClick={handleSubmit}>
-            Submit
+          <Button
+            variant="buttonMain"
+            onClick={handleSubmit}
+            disabled={createClientMutation.isPending}
+          >
+            {createClientMutation.isPending ? "Submitting..." : "Submit"}
           </Button>
         </div>
       </div>

@@ -47,6 +47,9 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 app.use(cookieParser());
 
+// Liveness probe — hit directly through nginx's TCP passthrough, no auth required
+app.get("/health", (req, res) => res.status(200).json({ status: "ok" }));
+
 // Import Routes
 import formRoutes from "./routes/formRoutes.js";
 import questionsRoutes from "./routes/questionsRoutes.js";

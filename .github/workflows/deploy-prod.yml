@@ -1,0 +1,101 @@
+name: Deploy to Production
+
+on:
+  push:
+    branches: [main]
+  # Do NOT enable workflow_dispatch / pull_request triggers on a self-hosted runner
+  # until branch protection + required reviews are enforced.
+
+# Least-privilege token — we only need to read the repo to deploy.
+permissions:
+  contents: read
+
+# NO concurrency group on purpose — see deploy-test.yml for why.
+
+jobs:
+  # One file per site (sites/<site>.conf) drives the matrix below — adding a
+  # new site is "drop in a new .conf file", not a workflow edit.
+  discover-sites:
+    name: Discover sites
+    runs-on: ubuntu-latest
+    outputs:
+      sites: ${{ steps.list.outputs.sites }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: list
+        run: |
+          sites=$(ls sites/*.conf | xargs -n1 basename -s .conf | jq -R -s -c 'split("\n")[:-1]')
+          echo "sites=$sites" >> "$GITHUB_OUTPUT"
+          echo "Discovered sites: $sites"
+
+  deploy:
+    name: Deploy Production Stack
+    needs: discover-sites
+    strategy:
+      fail-fast: false
+      matrix:
+        site: ${{ fromJSON(needs.discover-sites.outputs.sites) }}
+    # SECURITY: this runner MUST be a separate machine from the test runner. A
+    # self-hosted runner executes arbitrary workflow code; co-locating test and
+    # prod runners means a bad test change can reach prod secrets/host.
+    runs-on: [self-hosted, "${{ matrix.site }}-prod"]
+    environment: "${{ matrix.site }}-prod" # tracks deployments; enables the required-reviewer approval gate, per site
+    timeout-minutes: 30
+
+    steps:
+      # ── 1. Stop this site's existing containers FIRST (releases Windows
+      # file locks) — targets purely by project name/label, so it needs no
+      # site config file and can safely run before checkout.
+      - name: Stop existing containers
+        shell: cmd
+        run: |
+          "C:\Program Files\Git\bin\bash.exe" -c "docker compose -p qfsd-${{ matrix.site }}-prod down -t 30 --remove-orphans || true"
+
+      # ── 2. Checkout source ────────────────────────────────────────────────
+      # clean: false as defense-in-depth, but the certs no longer depend on
+      # it surviving — see the restore step below.
+      - name: Checkout source
+        uses: actions/checkout@v4
+        with:
+          clean: false
+
+      # ── 3. Restore SSL certs from a stable, workspace-independent location ─
+      # server/certificates/ is git-ignored, so it isn't in the checkout at
+      # all. Restoring from C:\qfsdforms-certs (outside the runner's _work
+      # tree) instead of relying on the workspace never being wiped — commands
+      # like `rd /s /q` on a locked workspace (see README Troubleshooting)
+      # would otherwise take the shared cert down with it, for every site.
+      - name: Restore certs
+        shell: cmd
+        run: |
+          xcopy "C:\qfsdforms-certs" "%CD%\server\certificates\" /E /I /Y
+
+      # ── 4. Write this site's .env (masked; cleaned up in finally below) ───
+      - name: Create site .env
+        shell: powershell
+        run: |
+          $env:SITE_ENV | Set-Content -Path "server\.env.${{ matrix.site }}.prod" -Encoding UTF8
+        env:
+          SITE_ENV: ${{ secrets.SITE_ENV }}
+
+      # ── 5. Build + deploy + verify — all handled by deploy.sh, in the
+      # correct order (snapshot before build, then build+up, then health
+      # check), so there's exactly one place that logic lives.
+      - name: Deploy site stack
+        shell: cmd
+        run: |
+          "C:\Program Files\Git\bin\bash.exe" -c "bash deploy.sh ${{ matrix.site }} prod --build"
+
+      # ── 6. Rollback on any failure ─────────────────────────────────────────
+      - name: Rollback on failure
+        if: failure()
+        shell: cmd
+        run: |
+          "C:\Program Files\Git\bin\bash.exe" -c "bash deploy.sh ${{ matrix.site }} prod --rollback || true"
+
+      # ── 7. ALWAYS remove this site's .env from the workspace ──────────────
+      - name: Cleanup .env file
+        if: always()
+        shell: cmd
+        run: |
+          if exist server\.env.${{ matrix.site }}.prod (del server\.env.${{ matrix.site }}.prod && echo [INFO] .env removed from workspace.)

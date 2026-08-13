@@ -1,0 +1,129 @@
+# =============================================================================
+# docker-compose.test.yml — TEST / STAGING, shared template across every site
+# =============================================================================
+# Not run directly with `docker compose up` — always via deploy.sh, which
+# exports SITE/CLIENT_DOMAIN/CLIENT_PORT/SERVER_PORT/MYSQL_PORT (sourced from
+# sites/<site>.conf) and sets the project name with `-p qfsd-<site>-test`.
+#
+# Note: Compose only interpolates ${VAR} in VALUES, not in mapping keys — so
+# the volumes/networks below keep static internal keys (mysql_data, etc.) and
+# push the actual per-site Docker object name into each one's `name:` field
+# instead of the key itself.
+#
+# Manual equivalent for one site, e.g. marilao:
+#   set -a; source sites/marilao.conf; \
+#   SITE=marilao ENV=test CLIENT_DOMAIN=$TEST_CLIENT_DOMAIN \
+#   CLIENT_PORT=$TEST_CLIENT_PORT SERVER_PORT=$TEST_SERVER_PORT \
+#   MYSQL_PORT=$TEST_MYSQL_PORT; set +a; \
+#   docker compose -p qfsd-marilao-test -f docker-compose.test.yml up -d --build
+# =============================================================================
+
+services:
+  # ─── Client (Vite/React) ────────────────────────────────────────────────
+  client:
+    build:
+      context: ./client
+      dockerfile: Dockerfile
+      args:
+        VITE_API_URL: https://${CLIENT_DOMAIN}:${SERVER_PORT}
+    image: qfsd-${SITE}-client:test
+    container_name: qfsd_${SITE}_client_test
+    restart: unless-stopped
+    volumes:
+      - ./server/certificates:/etc/nginx/certs:ro # SSL certs for client's internal nginx (shared wildcard cert, all sites)
+    networks:
+      - site_network
+    depends_on:
+      - server
+
+  # ─── Server (Node/Express) ───────────────────────────────────────────────
+  server:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+    image: qfsd-${SITE}-server:test
+    container_name: qfsd_${SITE}_server_test
+    restart: unless-stopped
+    env_file:
+      - ./server/.env.${SITE}.test
+    volumes:
+      - ./server/certificates:/app/certificates:ro # SSL certs (read-only)
+      - server_logs:/app/logs # Persistent logs
+    networks:
+      - site_network
+    depends_on:
+      mysql:
+        condition: service_healthy
+    expose:
+      - "${SERVER_PORT}" # PORT_TEST (NODE_ENV=test) — internal only, Nginx proxies to this
+
+  # ─── Nginx Reverse Proxy ──────────────────────────────────────────────────
+  nginx:
+    image: nginx:1.27-alpine
+    container_name: qfsd_${SITE}_nginx_test
+    restart: unless-stopped
+    environment:
+      - CLIENT_PORT=${CLIENT_PORT}
+      - SERVER_PORT=${SERVER_PORT}
+    ports:
+      - "${CLIENT_PORT}:${CLIENT_PORT}" # Client public port
+      - "${SERVER_PORT}:${SERVER_PORT}" # Server public port
+    volumes:
+      - ./nginx/nginx.conf.template:/etc/nginx/nginx.conf.template:ro
+    entrypoint:
+      [
+        "sh",
+        "-c",
+        "envsubst '$$CLIENT_PORT $$SERVER_PORT' < /etc/nginx/nginx.conf.template > /etc/nginx/nginx.conf && exec nginx -g 'daemon off;'",
+      ]
+    networks:
+      - site_network
+    depends_on:
+      - client
+      - server
+
+  # ─── MySQL ────────────────────────────────────────────────────────────────
+  mysql:
+    image: mysql:8.0
+    container_name: qfsd_${SITE}_mysql_test
+    restart: unless-stopped
+    env_file:
+      - ./server/.env.${SITE}.test # MYSQL_ROOT_PASSWORD, MYSQL_DATABASE, MYSQL_USER, MYSQL_PASSWORD
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./mysql-init:/docker-entrypoint-initdb.d:ro # Seed scripts (optional)
+    networks:
+      - site_network
+    ports:
+      - "${MYSQL_PORT}:3306" # Internal only — never expose DB port publicly
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "mysqladmin",
+          "ping",
+          "-h",
+          "localhost",
+          "-u",
+          "root",
+          "--password=$$MYSQL_ROOT_PASSWORD",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+# ─── Volumes ──────────────────────────────────────────────────────────────────
+# Internal keys stay static; `name:` carries the actual per-site Docker volume
+# name (this IS a value, so ${SITE} substitution applies here).
+volumes:
+  mysql_data:
+    name: qfsd_${SITE}_test_mysql_data
+  server_logs:
+    name: qfsd_${SITE}_test_server_logs
+
+# ─── Networks ─────────────────────────────────────────────────────────────────
+networks:
+  site_network:
+    name: qfsd_${SITE}_test_network
+    driver: bridge

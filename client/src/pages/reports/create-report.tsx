@@ -11,7 +11,9 @@ import {
   LuSearch,
   LuTrendingUp,
   LuSave,
+  LuFileDown,
 } from "react-icons/lu";
+import { exportReportToExcel } from "@/lib/exportReportToExcel";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import {
@@ -257,6 +259,54 @@ export default function CreateReport() {
     onError: (err: any) => {
       console.error("Save report error:", err);
       toast.error("Failed to save report", {
+        description:
+          err?.response?.data?.message ||
+          err?.message ||
+          "Something went wrong",
+      });
+    },
+  });
+
+  // ✅ NEW: Export to Excel
+  const { mutate: exportToExcel, isPending: isExporting } = useMutation({
+    mutationFn: async () => {
+      const entryIds = filteredEntries.map((entry) => entry.entry_id);
+      const res = await apiPost<any>("/reports/raw-answers", {
+        entry_ids: entryIds,
+      });
+      return res.data as Array<{
+        entry_id: number;
+        date: string | null;
+        site: string | null;
+        area: string | null;
+        section_name: string | null;
+        question_text: string | null;
+        answer: string;
+        remarks: string;
+        action_item: string;
+      }>;
+    },
+    onSuccess: (rawAnswers) => {
+      const formLabel =
+        filterOptions?.forms.find(
+          (f) => f.value === Number(formData.formType),
+        )?.label || "Unknown Form";
+
+      exportReportToExcel({
+        formLabel,
+        site: formData.site || null,
+        area: formData.area || null,
+        dateFrom: formData.dateFrom,
+        dateTo: formData.dateTo,
+        entries: filteredEntries,
+        rawAnswers,
+      });
+
+      toast.success("Report exported successfully");
+    },
+    onError: (err: any) => {
+      console.error("Export error:", err);
+      toast.error("Failed to export report", {
         description:
           err?.response?.data?.message ||
           err?.message ||
@@ -675,9 +725,21 @@ export default function CreateReport() {
         {/* Filtered Results Table */}
         {filterApplied && (
           <div className="mt-8">
-            <h2 className="text-lg font-semibold mb-4 text-gray-700">
-              Filtered Results ({filteredEntries.length} entries)
-            </h2>
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-semibold text-gray-700">
+                Filtered Results ({filteredEntries.length} entries)
+              </h2>
+              {filteredEntries.length > 0 && (
+                <Button
+                  variant="buttonMainNegative"
+                  icon={<LuFileDown />}
+                  onClick={() => exportToExcel()}
+                  disabled={isExporting}
+                >
+                  {isExporting ? "Exporting..." : "Export to Excel"}
+                </Button>
+              )}
+            </div>
             {filteredEntries.length === 0 ? (
               <div className="border-2 border-dashed border-gray-300 rounded-lg p-8">
                 <div className="text-center text-gray-500">
