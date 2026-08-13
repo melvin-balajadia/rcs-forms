@@ -73,9 +73,12 @@ jobs:
 
       # ── 4. Write this site's .env (masked; cleaned up in finally below) ───
       - name: Create site .env
-        shell: powershell
+        # Invoked through cmd with -ExecutionPolicy Bypass: `shell: powershell`
+        # writes a .ps1 to the runner temp dir, which a host with the default
+        # Restricted execution policy refuses to load (UnauthorizedAccess).
+        shell: cmd
         run: |
-          $env:SITE_ENV | Set-Content -Path "server\.env.${{ matrix.site }}.test" -Encoding UTF8
+          powershell -NoProfile -ExecutionPolicy Bypass -Command "$env:SITE_ENV | Set-Content -Path 'server\.env.${{ matrix.site }}.test' -Encoding UTF8"
         env:
           SITE_ENV: ${{ secrets.SITE_ENV }}
 
