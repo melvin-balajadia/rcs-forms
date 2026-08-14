@@ -95,7 +95,8 @@ services:
     networks:
       - site_network
     ports:
-      - "${MYSQL_PORT}:3306" # Internal only — never expose DB port publicly
+      # Bound to loopback, not 0.0.0.0 — see docker-compose.prod.yml.
+      - "127.0.0.1:${MYSQL_PORT}:3306"
     healthcheck:
       test:
         [
