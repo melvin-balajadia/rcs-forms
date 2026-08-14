@@ -99,6 +99,7 @@ jobs:
         shell: cmd
         run: |
           "C:\Program Files\Git\bin\bash.exe" -c "docker compose -p qfsd-${{ matrix.site }}-prod logs --tail=100 || true"
+          "C:\Program Files\Git\bin\bash.exe" -c "docker inspect --format '{{json .State.Health}}' qfsd_${{ matrix.site }}_mysql_prod || true"
 
       # ── 7. Rollback on any failure ─────────────────────────────────────────
       - name: Rollback on failure
