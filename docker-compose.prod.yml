@@ -77,7 +77,11 @@ services:
 
   # ─── MySQL ────────────────────────────────────────────────────────────────
   mysql:
-    image: mysql:8.0
+    # 8.4, not 8.0: both sites' prod datadirs were created by the old manual
+    # stack's `mysql:8` tag (= 8.4.x). MySQL datadirs upgrade forward but never
+    # backward, so an 8.0 server exits on these volumes. Pinned to the minor
+    # version rather than the floating `8` so a tag move can't upgrade prod data.
+    image: mysql:8.4
     container_name: qfsd_${SITE}_mysql_prod
     restart: unless-stopped
     env_file:
