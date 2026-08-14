@@ -278,6 +278,47 @@ bash deploy.sh taytay prod --down
 
 ---
 
+## Database Backups
+
+**Rollback restores images, never data.** `deploy.sh --rollback` re-tags the
+previous client/server images — the MySQL volume is untouched by design, so a
+bad migration or a dropped table is not recoverable from it. Dumps are the only
+data safety net.
+
+```bash
+bash backup.sh          # all prod stacks on this host
+bash backup.sh test     # all test stacks
+```
+
+Writes `C:/backups/<site>/<env>/<site>_<env>_<date>.sql.gz`, verifies each dump
+ends with mysqldump's completion marker (a truncated dump that looks fine is
+worse than a loud failure), and prunes anything older than 14 days.
+
+Targets are discovered from running `qfsd_<site>_mysql_<env>` containers, so it
+needs no site config and no `.env` — which matters, because the pipeline deletes
+`server/.env.<site>.<env>` after every deploy. The root password is read from
+the container's own environment and passed via `MYSQL_PWD`, so it never reaches
+the host's process list.
+
+### Schedule it (per VM, once)
+
+```powershell
+schtasks /create /tn "qfsd-backup" /sc daily /st 02:00 /ru SYSTEM ^
+  /tr "\"C:\Program Files\Git\bin\bash.exe\" -c \"cd /c/actions-runner-rcsforms/_work/rcs-forms/rcs-forms && bash backup.sh prod\""
+```
+
+Restore is a plain gzip + mysql pipe:
+
+```bash
+gzip -dc C:/backups/marilao/prod/marilao_prod_2026-08-14_0200.sql.gz \
+  | docker exec -i qfsd_marilao_mysql_prod sh -c 'MYSQL_PWD="$MYSQL_ROOT_PASSWORD" mysql -uroot'
+```
+
+Test a restore into a throwaway container at least once. A backup you've never
+restored is a hypothesis, not a backup.
+
+---
+
 ## Branching Rules
 
 | Branch | Purpose                       | Deploys to |
@@ -657,12 +698,64 @@ you see cross-talk, the most likely cause is two sites' `.conf` files
 accidentally sharing a port — check `sites/*.conf` for duplicate
 `*_CLIENT_PORT`/`*_SERVER_PORT`/`*_MYSQL_PORT` values on the same VM.
 
+### `Unable to lock ./ibdata1 error: 11` in the mysql log
+
+Two mysqld processes are pointed at one datadir — InnoDB takes an exclusive
+lock, so the second one exits and the stack fails with `dependency failed to
+start: container qfsd_<site>_mysql_<env> is unhealthy`.
+
+```bash
+docker ps -a --filter volume=<the-volume-name>
+```
+
+Anything listed besides `qfsd_<site>_mysql_<env>` is the culprit — usually a
+leftover manual stack, or a throwaway container someone started to inspect the
+volume. `docker rm -f` it; that never touches the volume or its data. Note that
+`Ctrl+C` on a foreground `docker run` often leaves mysqld running rather than
+stopping it, so debug containers outlive the terminal that started them.
+
+### mysql exits immediately on a pre-existing volume
+
+Look for a version complaint in `docker logs qfsd_<site>_mysql_<env>`. MySQL
+datadirs upgrade forward but **never** backward: a volume written by 8.4 cannot
+be opened by an 8.0 server. This bites when adopting a manually-deployed site
+whose old compose file used a floating tag like `mysql:8` (which resolves to the
+latest 8.x — 8.4, not 8.0).
+
+Find out what the data actually is, without the stack in the way:
+
+```bash
+docker run --rm -v <the-volume-name>:/var/lib/mysql mysql:8.4
+```
+
+The `Version:` line in that output is the version to pin `image:` to. Remove the
+probe container afterwards (see the entry above). Pin the exact minor version,
+never the floating `8`, so a tag move can't silently upgrade production data.
+
+### `running scripts is disabled on this system` in a workflow step
+
+The runner's PowerShell execution policy is `Restricted`, and `shell: powershell`
+works by writing a `.ps1` to the runner temp directory. Either invoke PowerShell
+through `shell: cmd` with `-ExecutionPolicy Bypass` (what the deploy workflows
+do for the "Create site .env" step), or set the policy on the host:
+`Set-ExecutionPolicy -Scope LocalMachine RemoteSigned`.
+
+### `permission denied ... npipe:////./pipe/docker_engine`
+
+The runner's service account can't reach the Docker API. Find the account
+(`Get-CimInstance Win32_Service -Filter "Name like 'actions.runner%'" | Select
+Name, StartName`), add it to the local `docker-users` group, then **restart the
+runner service** — group membership only lands in the service token on restart.
+
+```powershell
+net localgroup docker-users "NT AUTHORITY\NETWORK SERVICE" /add
+Restart-Service (Get-Service 'actions.runner*').Name
+```
+
 ---
 
 ## Known Gaps (deliberately deferred, not oversights)
 
-- **No automated DB backups** — unlike some other projects on this account,
-  there's no scheduled backup container here yet.
 - **No branch protection / required reviewers** — the repo is private on
   GitHub's Free plan, which doesn't support either for private repos (Pro
   upgrade, ~$4/mo, would unlock both) — and either way it would apply
