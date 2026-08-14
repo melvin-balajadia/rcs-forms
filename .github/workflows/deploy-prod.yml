@@ -89,7 +89,18 @@ jobs:
         run: |
           "C:\Program Files\Git\bin\bash.exe" -c "bash deploy.sh ${{ matrix.site }} prod --build"
 
-      # ── 6. Rollback on any failure ─────────────────────────────────────────
+      # ── 6. Dump logs BEFORE rollback ──────────────────────────────────────
+      # Rollback tears the stack down, taking the container logs with it — so
+      # a failed deploy left nothing to read and had to be reproduced by hand.
+      # -p only (no -f): matches by project label, so it needs neither the
+      # site's compose files nor the sourced env vars.
+      - name: Container logs on failure
+        if: failure()
+        shell: cmd
+        run: |
+          "C:\Program Files\Git\bin\bash.exe" -c "docker compose -p qfsd-${{ matrix.site }}-prod logs --tail=100 || true"
+
+      # ── 7. Rollback on any failure ─────────────────────────────────────────
       - name: Rollback on failure
         if: failure()
         shell: cmd

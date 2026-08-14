@@ -1,2 +1,6 @@
 .env
 node_modules
+# Per-site secrets the deploy pipeline writes (server/.env.<site>.<env>) — the
+# bare `.env` pattern above matches only files named exactly `.env`.
+server/.env.*
+!server/.env.example
