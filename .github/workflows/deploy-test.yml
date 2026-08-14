@@ -90,7 +90,19 @@ jobs:
         run: |
           "C:\Program Files\Git\bin\bash.exe" -c "bash deploy.sh ${{ matrix.site }} test --build"
 
-      # ── 6. ALWAYS remove this site's .env from the workspace ──────────────
+      # ── 6. Dump logs on failure ───────────────────────────────────────────
+      # Without this a failed deploy leaves nothing to read — the containers are
+      # still up here, but debugging by hand needs the .env that step 7 deletes.
+      # -p only (no -f): matches by project label, so it needs neither the
+      # site's compose files nor the sourced env vars.
+      - name: Container logs on failure
+        if: failure()
+        shell: cmd
+        run: |
+          "C:\Program Files\Git\bin\bash.exe" -c "docker compose -p qfsd-${{ matrix.site }}-test logs --tail=100 || true"
+          "C:\Program Files\Git\bin\bash.exe" -c "docker inspect --format '{{json .State.Health}}' qfsd_${{ matrix.site }}_mysql_test || true"
+
+      # ── 7. ALWAYS remove this site's .env from the workspace ──────────────
       - name: Cleanup .env file
         if: always()
         shell: cmd

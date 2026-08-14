@@ -173,8 +173,9 @@ fi
 # Snapshot current image IDs BEFORE bringing anything down, so --rollback can
 # restore them. Inspect the IMAGES by tag (survives `down`, which removes
 # containers), and use the SAME filenames the --rollback block reads above.
-# In CI the build runs before this script, so the prod workflow snapshots
-# earlier (see deploy-prod.yml); this covers manual `./deploy.sh <site> <env> --build` runs.
+# Same in CI and by hand: the build happens during `up` further below, so at
+# this point the tags still resolve to the images the LAST deploy shipped.
+# Note this snapshots images only — never data. See README for DB backups.
 mkdir -p "$ROLLBACK_DIR"
 docker image inspect --format='{{.Id}}' "qfsd-${SITE}-client:${ENV}" 2>/dev/null \
   > "${ROLLBACK_DIR}/client_prev.txt" || echo "none" > "${ROLLBACK_DIR}/client_prev.txt"

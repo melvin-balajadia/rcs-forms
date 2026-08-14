@@ -92,7 +92,10 @@ services:
     networks:
       - site_network
     ports:
-      - "${MYSQL_PORT}:3306" # Internal only — never expose DB port publicly
+      # Bound to loopback, not 0.0.0.0: the app reaches MySQL as mysql:3306 over
+      # the compose network and never uses this mapping — it exists only for
+      # host-side tools (DBeaver et al), which connect from the host itself.
+      - "127.0.0.1:${MYSQL_PORT}:3306"
     healthcheck:
       test:
         [

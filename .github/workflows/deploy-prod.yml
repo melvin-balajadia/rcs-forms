@@ -35,9 +35,10 @@ jobs:
       fail-fast: false
       matrix:
         site: ${{ fromJSON(needs.discover-sites.outputs.sites) }}
-    # SECURITY: this runner MUST be a separate machine from the test runner. A
-    # self-hosted runner executes arbitrary workflow code; co-locating test and
-    # prod runners means a bad test change can reach prod secrets/host.
+    # SECURITY — NOT YET TRUE: as of 2026-08, 0409RCSAPPS002 hosts BOTH sites'
+    # prod stacks alongside other runners. A self-hosted runner executes
+    # arbitrary workflow code, so co-locating test and prod runners means a bad
+    # test change can reach prod secrets/host. Prod should get its own machine.
     runs-on: [self-hosted, "${{ matrix.site }}-prod"]
     environment: "${{ matrix.site }}-prod" # tracks deployments; enables the required-reviewer approval gate, per site
     timeout-minutes: 30
