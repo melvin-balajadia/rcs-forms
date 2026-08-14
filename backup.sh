@@ -27,7 +27,10 @@ success() { echo -e "${GREEN}[OK]${NC}    $*"; }
 error()   { echo -e "${RED}[ERROR]${NC} $*" >&2; exit 1; }
 
 STAMP=$(date +%Y-%m-%d_%H%M)
-CONTAINERS=$(docker ps --filter "name=_mysql_${ENV}$" --format '{{.Names}}') \
+# Anchored to ^qfsd_: this host also runs unrelated stacks (whdocr, smartscan).
+# Backing up another project's production DB from this repo's script would be a
+# scope decision made by accident — those get their own schedule if they want one.
+CONTAINERS=$(docker ps --filter "name=^qfsd_.*_mysql_${ENV}$" --format '{{.Names}}') \
   || error "Cannot reach the Docker daemon — is Docker running, and is this account in docker-users?"
 [[ -n "$CONTAINERS" ]] || error "No running qfsd_*_mysql_${ENV} containers found."
 
