@@ -1,5 +1,6 @@
 import express from "express";
 import verifyJWT from "../middleware/verifyJWT.js";
+import requireRole, { ADMINS, APPROVERS } from "../middleware/requireRole.js";
 import {
   getFormEntries,
   getFormEntryById,
@@ -16,16 +17,22 @@ import {
 
 const router = express.Router();
 
-router.get("/all", verifyJWT, getFormEntries);
-router.get("/get/:id", verifyJWT, getFormEntryById);
-router.delete("/:id", verifyJWT, deleteFormEntry);
-router.get("/pagination", verifyJWT, formEntriesPagination);
-router.post("/create-builder", verifyJWT, createFormEntryBuilder);
-router.post("/submit-approval", verifyJWT, submitForApproval);
-router.post("/approve", verifyJWT, approveFormEntry);
-router.put("/update-builder/:entryId", verifyJWT, updateFormEntryBuilder);
-router.get("/entry/:entryId", verifyJWT, getQuestionValuesByEntryId);
-router.get("/:id/approval-history", verifyJWT, getApprovalHistory);
-router.post("/return", verifyJWT, returnFormEntry);
+router.use(verifyJWT);
+
+// Unscoped list of every entry and hard delete — not used by the UI
+router.get("/all", requireRole(...ADMINS), getFormEntries);
+router.delete("/:id", requireRole(...ADMINS), deleteFormEntry);
+
+router.get("/get/:id", getFormEntryById);
+router.get("/pagination", formEntriesPagination);
+router.post("/create-builder", createFormEntryBuilder);
+router.post("/submit-approval", submitForApproval);
+router.put("/update-builder/:entryId", updateFormEntryBuilder);
+router.get("/entry/:entryId", getQuestionValuesByEntryId);
+router.get("/:id/approval-history", getApprovalHistory);
+
+// Requestors never approve or return entries
+router.post("/approve", requireRole(...APPROVERS), approveFormEntry);
+router.post("/return", requireRole(...APPROVERS), returnFormEntry);
 
 export default router;

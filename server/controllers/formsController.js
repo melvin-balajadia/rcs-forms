@@ -337,12 +337,15 @@ export const submitFormBuilder = async (req, res) => {
       form_id: currentFormId,
     });
   } catch (error) {
-    await t.rollback();
+    if (!t.finished) await t.rollback();
     console.error("Submit Error:", error);
     res.status(500).json({
       message: "Error submitting form data",
       error: error.message,
     });
+  } finally {
+    // Early returns above skip rollback; never leave a transaction open
+    if (!t.finished) await t.rollback();
   }
 };
 
@@ -565,11 +568,14 @@ export const updateFormBuilder = async (req, res) => {
       form_id,
     });
   } catch (error) {
-    await t.rollback();
+    if (!t.finished) await t.rollback();
     console.error("Update Error:", error);
     res.status(500).json({
       message: "Error updating form data",
       error: error.message,
     });
+  } finally {
+    // Early returns above skip rollback; never leave a transaction open
+    if (!t.finished) await t.rollback();
   }
 };

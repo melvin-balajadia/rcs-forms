@@ -31,7 +31,8 @@ export const login = async (req, res) => {
       where: { user_username },
     });
 
-    if (!user) {
+    // Archived accounts are treated as if they don't exist
+    if (!user || user.user_archivestatus) {
       return res.json({
         errorStatus: true,
         message: "Couldn't find your account",
@@ -126,7 +127,7 @@ export const refreshToken = async (req, res) => {
     const user = await Users.findOne({
       where: { user_refreshtoken: refreshToken },
     });
-    if (!user) return res.sendStatus(403);
+    if (!user || user.user_archivestatus) return res.sendStatus(403);
 
     jwt.verify(
       refreshToken,
