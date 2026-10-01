@@ -2,6 +2,7 @@ import crypto from "crypto";
 import jwt from "jsonwebtoken";
 import bcrypt from "bcrypt";
 import Users from "../Models/Users.js";
+import { rolesFingerprint } from "../utilities/session.js";
 
 // Reset tokens are signed with a key derived from ACCESS_TOKEN_SECRET so they
 // can never be accepted as access tokens, and no new env variable is needed.
@@ -71,7 +72,7 @@ export const login = async (req, res) => {
     const userGroups = user.user_groups;
 
     const accessToken = jwt.sign(
-      { user_name: user.user_username },
+      { user_name: user.user_username, grp: rolesFingerprint(user) },
       process.env.ACCESS_TOKEN_SECRET,
       { expiresIn: "5h" },
     );
@@ -127,7 +128,10 @@ export const refreshToken = async (req, res) => {
     const user = await Users.findOne({
       where: { user_refreshtoken: refreshToken },
     });
-    if (!user || user.user_archivestatus) return res.sendStatus(403);
+    // Archived accounts, and accounts with a pending password reset, must log
+    // in again (login sends a pending reset to the reset page)
+    if (!user || user.user_archivestatus || !user.user_reset_token)
+      return res.sendStatus(403);
 
     jwt.verify(
       refreshToken,
@@ -138,7 +142,11 @@ export const refreshToken = async (req, res) => {
         }
 
         const accessToken = jwt.sign(
-          { sub: user.id, user_name: user.user_username },
+          {
+            sub: user.id,
+            user_name: user.user_username,
+            grp: rolesFingerprint(user),
+          },
           process.env.ACCESS_TOKEN_SECRET,
           { expiresIn: "5h" },
         );

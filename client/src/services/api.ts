@@ -53,6 +53,8 @@ api.interceptors.response.use(
         );
 
         const newAccessToken = res.data.accessToken;
+        // No cookie: the session is gone
+        if (!newAccessToken) throw new Error("Session expired");
         setAuthToken(newAccessToken, getAuth().user);
 
         if (originalRequest.headers) {
@@ -61,7 +63,10 @@ api.interceptors.response.use(
 
         return api(originalRequest);
       } catch (refreshError) {
+        // The server ended the session (password reset, role change, archived
+        // account). Reload on the login page so no stale user state remains.
         clearAuthToken();
+        window.location.replace("/login");
         return Promise.reject(refreshError);
       }
     }

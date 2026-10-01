@@ -44,6 +44,7 @@ what changed, why, and how it was verified. Updated at the end of every phase.
 | Who resets or sets other users' passwords | `all_access` only. |
 | Who uses User Management (create, view, edit users) | `all_access` only. `qfd_admin` may also *list* users, because the Forms edit page uses the list to pick approvers. |
 | Standalone EAV endpoints (`/questions`, `/questions-value`, `/questions-sub-value`, `/form-section`) | Kept (part of the EAV design), restricted to `all_access` and `qfd_admin`. The UI writes these tables through the builder endpoints. Removal can be revisited in Phase 6. |
+| Password reset or role change by an admin | Ends that user's sessions; they log in again. |
 | Automated tests in CI | Not yet. Tests run locally with `npm test`; adding `- run: npm test` to `.github/workflows/ci.yml` is a later decision. |
 
 ---
@@ -183,9 +184,39 @@ npm test
 | `tests/identity.test.js` | Spoofed `user_id` / `approver_id` / `returner_id` are ignored; existing approval rules still hold |
 | `tests/transactions.test.js` | Early returns don't leak transactions (fails if the `finally` blocks are removed) |
 | `tests/auth.test.js` | Login, refresh, archived accounts, the Phase 0 reset flow, and no secrets in responses |
+| `tests/sessions.test.js` | Sessions end on admin password reset and role change, but not on other edits (follow-up below) |
 | `tests/smoke.test.js` | Harness sanity checks |
 
 Result: **411 tests passing**.
+
+### Follow-up: sessions end on password reset and role change
+
+Found during manual testing: after an admin reset a user's password, the user
+stayed logged in. Their refresh cookie (1 day) and access token (5 hours) kept
+working, so the reset only took effect whenever that session ended on its own.
+That also matters for security: resetting a possibly compromised account didn't
+cut off the existing session. Role changes didn't end sessions either, so an
+open tab kept showing the old role's menus until a reload.
+
+Changes:
+
+- **Admin password reset** (`PUT /api/users/reset-password/:id`, or a password
+  set through `PUT /api/users/edit/:id`) clears the user's stored refresh token.
+- **Role change** (`user_groups` actually changed in `PUT /api/users/edit/:id`)
+  clears the stored refresh token. Editing other details keeps the user logged in.
+- **Access tokens carry a roles fingerprint** (`grp` claim,
+  `utilities/session.js`). `verifyJWT` rejects a token whose roles no longer
+  match (401). Tokens issued before this change have no `grp` claim and stay
+  valid until they expire, so deploying doesn't log everyone out.
+- **`verifyJWT` and the refresh endpoint refuse accounts with a pending
+  password reset**, so an open tab is logged out on its next request.
+- **Client** (`client/src/services/api.ts`): when the automatic refresh fails,
+  the app goes to `/login`. Before, the screen stayed "logged in" with every
+  request failing.
+
+Result: the user's next click takes them to login. After a password reset,
+logging in takes them to the reset page; after a role change, they log in with
+the new role. Covered by `tests/sessions.test.js`; **416 tests passing**.
 
 ### Carried forward
 
