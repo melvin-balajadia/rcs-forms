@@ -9,6 +9,8 @@ import {
 
 const router = express.Router();
 
+router.use(verifyJWT);
+
 router.post("/create", createFormSection);
 router.get("/all", getFormSections);
 router.get("/get/:form_id", getFormSectionsByFormId);

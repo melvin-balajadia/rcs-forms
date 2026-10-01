@@ -11,6 +11,8 @@ import {
 
 const router = express.Router();
 
+router.use(verifyJWT);
+
 router.get("/all", getFormQuestionSubValues);
 router.get("/get/:id", getFormQuestionSubValueById);
 router.post("/create", createFormQuestionSubValue);

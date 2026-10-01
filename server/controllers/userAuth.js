@@ -1,6 +1,20 @@
+import crypto from "crypto";
 import jwt from "jsonwebtoken";
 import bcrypt from "bcrypt";
 import Users from "../Models/Users.js";
+
+// Reset tokens are signed with a key derived from ACCESS_TOKEN_SECRET so they
+// can never be accepted as access tokens, and no new env variable is needed.
+const resetTokenSecret = () =>
+  crypto
+    .createHmac("sha256", process.env.ACCESS_TOKEN_SECRET)
+    .update("password-reset")
+    .digest("hex");
+
+// Ties a reset token to the current password hash, so the token stops working
+// once the password changes (single use, and invalidated by an admin re-reset).
+const passwordFingerprint = (passwordHash) =>
+  crypto.createHash("sha256").update(passwordHash).digest("hex").slice(0, 16);
 
 export const login = async (req, res) => {
   const { user_username, user_password } = req.body;
@@ -13,7 +27,9 @@ export const login = async (req, res) => {
   }
 
   try {
-    const user = await Users.findOne({ where: { user_username } });
+    const user = await Users.scope("withSecrets").findOne({
+      where: { user_username },
+    });
 
     if (!user) {
       return res.json({
@@ -31,10 +47,16 @@ export const login = async (req, res) => {
     }
 
     if (!user.user_reset_token) {
+      const resetToken = jwt.sign(
+        { sub: user.id, pwd: passwordFingerprint(user.user_password) },
+        resetTokenSecret(),
+        { expiresIn: "15m" },
+      );
+
       return res.json({
         errorStatus: false,
         requiresReset: true,
-        userId: user.id,
+        resetToken,
         message: "Password reset required",
       });
     }
@@ -182,9 +204,9 @@ export const logout = async (req, res) => {
 };
 
 export const resetPassword = async (req, res) => {
-  const { userId, newPassword, confirmPassword } = req.body;
+  const { resetToken, newPassword, confirmPassword } = req.body;
 
-  if (!userId || !newPassword || !confirmPassword) {
+  if (!resetToken || !newPassword || !confirmPassword) {
     return res.json({ errorStatus: true, message: "All fields are required" });
   }
 
@@ -201,11 +223,28 @@ export const resetPassword = async (req, res) => {
     });
   }
 
-  try {
-    const user = await Users.findOne({ where: { id: userId } });
+  const invalidLink = {
+    errorStatus: true,
+    message: "Your reset session has expired. Please log in again.",
+  };
 
-    if (!user) {
-      return res.json({ errorStatus: true, message: "User not found" });
+  let payload;
+  try {
+    payload = jwt.verify(resetToken, resetTokenSecret());
+  } catch {
+    return res.json(invalidLink);
+  }
+
+  try {
+    const user = await Users.scope("withSecrets").findByPk(payload.sub);
+
+    // Only accounts still flagged for reset, with an unchanged password hash
+    if (
+      !user ||
+      user.user_reset_token ||
+      payload.pwd !== passwordFingerprint(user.user_password)
+    ) {
+      return res.json(invalidLink);
     }
 
     const hashedPassword = await bcrypt.hash(newPassword, 10);
@@ -217,11 +256,10 @@ export const resetPassword = async (req, res) => {
 
     res.json({ errorStatus: false, message: "Password updated successfully" });
   } catch (err) {
+    console.error("Reset password error:", err);
     res.json({
-      ErrorMessage:
-        "Unable to process your request. Contact your administrator.",
-      Error: err.toString(),
-      ErrorState: true,
+      errorStatus: true,
+      message: "Unable to process your request. Contact your administrator.",
     });
   }
 };
