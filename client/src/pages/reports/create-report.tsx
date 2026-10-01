@@ -1,5 +1,5 @@
 import { useNavigate } from "react-router-dom";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useAuth } from "@/context/AuthContext";
 import PageHeader from "@/components/page-header";
@@ -15,6 +15,7 @@ import {
 } from "react-icons/lu";
 import { exportReportToExcel } from "@/lib/exportReportToExcel";
 import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
 import {
   Select,
@@ -70,6 +71,17 @@ type Section = {
   question_count: number;
 };
 
+type AreaBreakdown = {
+  total_entries: number;
+  total_answers: number;
+  breakdown: {
+    yes: number;
+    no: number;
+    na: number;
+  };
+  average_percentage: number;
+};
+
 type ChartData = {
   chart_type: string;
   condition: string;
@@ -87,6 +99,10 @@ type ChartData = {
     section_id: number;
     section_name: string;
   };
+  area_comparison?: {
+    main: AreaBreakdown;
+    annex: AreaBreakdown;
+  } | null;
 };
 
 type ChartDataPerSection = {
@@ -153,7 +169,17 @@ export default function CreateReport() {
     condition: "",
     section: "",
     chartType: "",
+    compareArea: false,
   });
+
+  // Areas actually present in the currently filtered entries — the Main vs
+  // Annex comparison is only offered when both are present, regardless of
+  // what the Phase 1 Area dropdown was set to.
+  const presentAreas = useMemo(
+    () => new Set(filteredEntries.map((entry) => entry.area)),
+    [filteredEntries],
+  );
+  const canCompareAreas = presentAreas.has("Main") && presentAreas.has("Annex");
 
   const [chartData, setChartData] = useState<
     ChartData | ChartDataPerSection | ChartDataPerQuestion | null
@@ -200,7 +226,12 @@ export default function CreateReport() {
       setFilteredEntries(mappedEntries);
       setFilterApplied(true);
       setChartData(null);
-      setChartFilters({ condition: "", section: "", chartType: "" });
+      setChartFilters({
+        condition: "",
+        section: "",
+        chartType: "",
+        compareArea: false,
+      });
       toast.success(`Found ${response.count} entries`, {
         description: "Entries filtered successfully",
       });
@@ -288,9 +319,8 @@ export default function CreateReport() {
     },
     onSuccess: (rawAnswers) => {
       const formLabel =
-        filterOptions?.forms.find(
-          (f) => f.value === Number(formData.formType),
-        )?.label || "Unknown Form";
+        filterOptions?.forms.find((f) => f.value === Number(formData.formType))
+          ?.label || "Unknown Form";
 
       exportReportToExcel({
         formLabel,
@@ -397,6 +427,7 @@ export default function CreateReport() {
         condition: chartFilters.condition,
         section_id: chartFilters.section ? Number(chartFilters.section) : null,
         chart_type: "overall",
+        compare_area: canCompareAreas && chartFilters.compareArea,
       };
       generateChart(payload);
     }
@@ -520,9 +551,34 @@ export default function CreateReport() {
       chart_section_id: chartFilters.section
         ? Number(chartFilters.section)
         : null,
+      compare_area: Boolean((chartData as ChartData)?.area_comparison),
       ...snapshotData,
       // Add this block:
       detailed_snapshot: (() => {
+        if (
+          chartData?.chart_type === "overall" &&
+          (chartData as ChartData).area_comparison
+        ) {
+          const { main, annex } = (chartData as ChartData).area_comparison!;
+          return [
+            { area: main, label: "Main" },
+            { area: annex, label: "Annex" },
+          ].map(({ area, label }) => ({
+            data_type: "area",
+            section_id: null,
+            section_name: null,
+            area_label: label,
+            question_id: null,
+            question_text: null,
+            total_questions: null,
+            total_answers: area.total_answers,
+            yes_count: area.breakdown.yes,
+            no_count: area.breakdown.no,
+            na_count: area.breakdown.na,
+            average_percentage: area.average_percentage,
+          }));
+        }
+
         if (chartData?.chart_type === "per_section") {
           return (chartData as ChartDataPerSection).sections.map((s) => ({
             data_type: "section",
@@ -795,8 +851,8 @@ export default function CreateReport() {
                     <SelectValue placeholder="Select Condition" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="Y">Yes (Y)</SelectItem>
-                    <SelectItem value="N">No (N)</SelectItem>
+                    <SelectItem value="Y">Yes (Compliant)</SelectItem>
+                    <SelectItem value="N">No (Non-Compliant)</SelectItem>
                     <SelectItem value="NA">N/A</SelectItem>
                   </SelectContent>
                 </Select>
@@ -813,6 +869,12 @@ export default function CreateReport() {
                     handleChartFilterChange("chartType", val);
                     if (val === "per_section") {
                       setChartFilters((prev) => ({ ...prev, section: "" }));
+                    }
+                    if (val !== "overall") {
+                      setChartFilters((prev) => ({
+                        ...prev,
+                        compareArea: false,
+                      }));
                     }
                   }}
                 >
@@ -877,6 +939,28 @@ export default function CreateReport() {
                       )}
                     </SelectContent>
                   </Select>
+                </div>
+              )}
+
+              {/* Compare Main vs Annex - only for Overall Summary, and only
+                  when the filtered entries actually contain both areas */}
+              {chartFilters.chartType === "overall" && canCompareAreas && (
+                <div className="flex flex-col space-y-2 justify-end">
+                  <div className="flex items-center gap-2 pb-2">
+                    <Checkbox
+                      id="compare-area"
+                      checked={chartFilters.compareArea}
+                      onCheckedChange={(checked) =>
+                        setChartFilters((prev) => ({
+                          ...prev,
+                          compareArea: checked === true,
+                        }))
+                      }
+                    />
+                    <Label htmlFor="compare-area" className="cursor-pointer">
+                      Compare Main vs Annex
+                    </Label>
+                  </div>
                 </div>
               )}
 
@@ -1190,74 +1274,189 @@ export default function CreateReport() {
                     </p>
                   </div>
 
-                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-6 text-center">
-                    <p className="text-sm text-gray-600 mb-2">
-                      Average Percentage
-                    </p>
-                    <p className="text-5xl font-bold text-blue-600">
-                      {(chartData as ChartData).average_percentage}%
-                    </p>
-                    <p className="text-sm text-gray-500 mt-2">
-                      {(chartData as ChartData).condition_label} answers across{" "}
-                      {(chartData as ChartData).total_questions} questions
-                    </p>
-                  </div>
+                  {(chartData as ChartData).area_comparison ? (
+                    /* Main vs Annex Comparison */
+                    <div className="space-y-6">
+                      <div className="flex items-center justify-center">
+                        <ResponsiveContainer width="100%" height={280}>
+                          <BarChart
+                            data={[
+                              {
+                                name: "Main",
+                                percentage: (chartData as ChartData)
+                                  .area_comparison!.main.average_percentage,
+                              },
+                              {
+                                name: "Annex",
+                                percentage: (chartData as ChartData)
+                                  .area_comparison!.annex.average_percentage,
+                              },
+                            ]}
+                            margin={{
+                              top: 20,
+                              right: 30,
+                              left: 20,
+                              bottom: 20,
+                            }}
+                          >
+                            <CartesianGrid strokeDasharray="3 3" />
+                            <XAxis dataKey="name" tick={{ fontSize: 13 }} />
+                            <YAxis
+                              domain={[0, 100]}
+                              label={{
+                                value: "Percentage (%)",
+                                angle: -90,
+                                position: "insideLeft",
+                              }}
+                            />
+                            <Tooltip />
+                            <Legend />
+                            <Bar
+                              dataKey="percentage"
+                              name={`${(chartData as ChartData).condition_label} %`}
+                              radius={[8, 8, 0, 0]}
+                            >
+                              <Cell fill="#3b82f6" />
+                              <Cell fill="#8b5cf6" />
+                            </Bar>
+                          </BarChart>
+                        </ResponsiveContainer>
+                      </div>
 
-                  <div className="grid grid-cols-3 gap-4">
-                    <div className="bg-green-50 border border-green-200 rounded-lg p-4 text-center">
-                      <p className="text-sm text-gray-600">Yes</p>
-                      <p className="text-2xl font-bold text-green-600">
-                        {(chartData as ChartData).breakdown.yes}
-                      </p>
-                      <p className="text-xs text-gray-500">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         {(
-                          ((chartData as ChartData).breakdown.yes /
-                            (chartData as ChartData).total_answers) *
-                          100
-                        ).toFixed(1)}
-                        %
-                      </p>
+                          [
+                            {
+                              label: "Main",
+                              data: (chartData as ChartData).area_comparison!
+                                .main,
+                              cardColor: "border-blue-200 bg-blue-50",
+                              textColor: "text-blue-600",
+                            },
+                            {
+                              label: "Annex",
+                              data: (chartData as ChartData).area_comparison!
+                                .annex,
+                              cardColor: "border-purple-200 bg-purple-50",
+                              textColor: "text-purple-600",
+                            },
+                          ] as const
+                        ).map(({ label, data, cardColor, textColor }) => (
+                          <div
+                            key={label}
+                            className={`border rounded-lg p-4 ${cardColor}`}
+                          >
+                            <div className="flex justify-between items-start mb-3">
+                              <div>
+                                <h5 className="font-medium text-gray-800">
+                                  {label}
+                                </h5>
+                                <p className="text-sm text-gray-500">
+                                  {data.total_entries} entries,{" "}
+                                  {data.total_answers} total answers
+                                </p>
+                              </div>
+                              <p className={`text-3xl font-bold ${textColor}`}>
+                                {data.average_percentage}%
+                              </p>
+                            </div>
+                            <div className="grid grid-cols-3 gap-2">
+                              <div className="bg-green-50 border border-green-200 rounded p-2 text-center">
+                                <p className="text-xs text-gray-600">Yes</p>
+                                <p className="text-lg font-bold text-green-600">
+                                  {data.breakdown.yes}
+                                </p>
+                              </div>
+                              <div className="bg-red-50 border border-red-200 rounded p-2 text-center">
+                                <p className="text-xs text-gray-600">No</p>
+                                <p className="text-lg font-bold text-red-600">
+                                  {data.breakdown.no}
+                                </p>
+                              </div>
+                              <div className="bg-gray-50 border border-gray-200 rounded p-2 text-center">
+                                <p className="text-xs text-gray-600">N/A</p>
+                                <p className="text-lg font-bold text-gray-600">
+                                  {data.breakdown.na}
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
                     </div>
-                    <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-center">
-                      <p className="text-sm text-gray-600">No</p>
-                      <p className="text-2xl font-bold text-red-600">
-                        {(chartData as ChartData).breakdown.no}
-                      </p>
-                      <p className="text-xs text-gray-500">
-                        {(
-                          ((chartData as ChartData).breakdown.no /
-                            (chartData as ChartData).total_answers) *
-                          100
-                        ).toFixed(1)}
-                        %
-                      </p>
-                    </div>
-                    <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 text-center">
-                      <p className="text-sm text-gray-600">N/A</p>
-                      <p className="text-2xl font-bold text-gray-600">
-                        {(chartData as ChartData).breakdown.na}
-                      </p>
-                      <p className="text-xs text-gray-500">
-                        {(
-                          ((chartData as ChartData).breakdown.na /
-                            (chartData as ChartData).total_answers) *
-                          100
-                        ).toFixed(1)}
-                        %
-                      </p>
-                    </div>
-                  </div>
+                  ) : (
+                    <>
+                      <div className="bg-blue-50 border border-blue-200 rounded-lg p-6 text-center">
+                        <p className="text-sm text-gray-600 mb-2">
+                          Average Percentage
+                        </p>
+                        <p className="text-5xl font-bold text-blue-600">
+                          {(chartData as ChartData).average_percentage}%
+                        </p>
+                        <p className="text-sm text-gray-500 mt-2">
+                          {(chartData as ChartData).condition_label} answers
+                          across {(chartData as ChartData).total_questions}{" "}
+                          questions
+                        </p>
+                      </div>
 
-                  <div className="text-sm text-gray-600 bg-gray-50 p-4 rounded">
-                    <p className="font-medium mb-2">Summary:</p>
-                    <p>
-                      Out of {(chartData as ChartData).total_answers} total
-                      answers across {(chartData as ChartData).total_questions}{" "}
-                      questions, {(chartData as ChartData).average_percentage}%
-                      were "{(chartData as ChartData).condition_label}"
-                      responses.
-                    </p>
-                  </div>
+                      <div className="grid grid-cols-3 gap-4">
+                        <div className="bg-green-50 border border-green-200 rounded-lg p-4 text-center">
+                          <p className="text-sm text-gray-600">Yes</p>
+                          <p className="text-2xl font-bold text-green-600">
+                            {(chartData as ChartData).breakdown.yes}
+                          </p>
+                          <p className="text-xs text-gray-500">
+                            {(
+                              ((chartData as ChartData).breakdown.yes /
+                                (chartData as ChartData).total_answers) *
+                              100
+                            ).toFixed(1)}
+                            %
+                          </p>
+                        </div>
+                        <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-center">
+                          <p className="text-sm text-gray-600">No</p>
+                          <p className="text-2xl font-bold text-red-600">
+                            {(chartData as ChartData).breakdown.no}
+                          </p>
+                          <p className="text-xs text-gray-500">
+                            {(
+                              ((chartData as ChartData).breakdown.no /
+                                (chartData as ChartData).total_answers) *
+                              100
+                            ).toFixed(1)}
+                            %
+                          </p>
+                        </div>
+                        <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 text-center">
+                          <p className="text-sm text-gray-600">N/A</p>
+                          <p className="text-2xl font-bold text-gray-600">
+                            {(chartData as ChartData).breakdown.na}
+                          </p>
+                          <p className="text-xs text-gray-500">
+                            {(
+                              ((chartData as ChartData).breakdown.na /
+                                (chartData as ChartData).total_answers) *
+                              100
+                            ).toFixed(1)}
+                            %
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="text-sm text-gray-600 bg-gray-50 p-4 rounded">
+                        <p className="font-medium mb-2">Summary:</p>
+                        <p>
+                          Out of {(chartData as ChartData).total_answers} total
+                          answers across{" "}
+                          {(chartData as ChartData).total_questions} questions,{" "}
+                          {(chartData as ChartData).average_percentage}% were "
+                          {(chartData as ChartData).condition_label}" responses.
+                        </p>
+                      </div>
+                    </>
+                  )}
                 </div>
               </div>
             )}
