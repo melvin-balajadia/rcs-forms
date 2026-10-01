@@ -8,7 +8,6 @@ import FormSection from "../Models/FormSection.js";
 export const saveReport = async (req, res) => {
   try {
     const {
-      user_id,
       report_name,
       report_description,
       form_id,
@@ -45,7 +44,7 @@ export const saveReport = async (req, res) => {
 
     // Create saved report
     const savedReport = await SavedReport.create({
-      created_by: user_id,
+      created_by: req.user.id, // never a body-supplied id
       report_name,
       report_description: report_description || null,
       form_id,
@@ -218,7 +217,8 @@ export const getSavedReportById = async (req, res) => {
 export const updateSavedReport = async (req, res) => {
   try {
     const { reportId } = req.params;
-    const { userId } = req;
+    // Only the creator may edit or refresh their report
+    const userId = req.user.id;
     const { report_name, report_description } = req.body;
 
     const report = await SavedReport.findOne({
@@ -261,18 +261,19 @@ export const updateSavedReport = async (req, res) => {
 export const deleteSavedReport = async (req, res) => {
   try {
     const { reportId } = req.params;
-    const { userId } = req;
 
+    // Saved reports are shared between admins, and any admin may archive one
+    // (the route is admin-only)
     const report = await SavedReport.findOne({
       where: {
         id: reportId,
-        created_by: userId,
+        is_archived: false,
       },
     });
 
     if (!report) {
       return res.status(404).json({
-        message: "Report not found or you don't have permission to delete it",
+        message: "Report not found",
       });
     }
 
@@ -300,7 +301,8 @@ export const deleteSavedReport = async (req, res) => {
 export const refreshSavedReport = async (req, res) => {
   try {
     const { reportId } = req.params;
-    const { userId } = req;
+    // Only the creator may edit or refresh their report
+    const userId = req.user.id;
 
     const report = await SavedReport.findOne({
       where: {

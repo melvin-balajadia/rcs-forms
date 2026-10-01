@@ -9,7 +9,10 @@ import Question from "../Models/Questions.js";
 import SubQuestion from "../Models/SubQuestion.js";
 import { Op } from "sequelize";
 import sequelize from "../utilities/db.js";
-import { getFormEntryVisibility } from "../utilities/formEntryVisibility.js";
+import {
+  getFormEntryVisibility,
+  findVisibleEntry,
+} from "../utilities/formEntryVisibility.js";
 import { CREATE_STATUSES, canEditTo } from "../utilities/entryStatus.js";
 
 // ✅ Cross-checks a form's required questions/sub-questions against the
@@ -75,7 +78,7 @@ export const getFormEntries = async (req, res) => {
 // Get a single form entry by ID
 export const getFormEntryById = async (req, res) => {
   try {
-    const entry = await FormEntries.findByPk(req.params.id, {
+    const entry = await findVisibleEntry(req, req.params.id, {
       include: [
         Users,
         Forms,
@@ -95,17 +98,18 @@ export const getFormEntryById = async (req, res) => {
   }
 };
 
-// Delete a form entry
-export const deleteFormEntry = async (req, res) => {
+// Archive a form entry: hidden everywhere (lists, reports, dashboard) but
+// nothing is deleted
+export const archiveFormEntry = async (req, res) => {
   try {
     const entry = await FormEntries.findByPk(req.params.id);
     if (!entry)
       return res.status(404).json({ message: "Form entry not found" });
 
-    await entry.destroy();
-    res.status(200).json({ message: "Form entry deleted successfully" });
+    await entry.update({ form_entry_archivestatus: 1 });
+    res.status(200).json({ message: "Form entry archived successfully" });
   } catch (error) {
-    res.status(500).json({ message: "Error deleting form entry", error });
+    res.status(500).json({ message: "Error archiving form entry", error });
   }
 };
 
@@ -216,7 +220,6 @@ export const createFormEntryBuilder = async (req, res) => {
       form_entry_site,
       form_entry_area,
       form_entry_date,
-      form_entry_archivestatus,
       form_entry_status = "pending",
       responses, // [{ form_question_id, form_value, remarks, action_item, sub_values: [] }]
     } = req.body;
@@ -263,7 +266,10 @@ export const createFormEntryBuilder = async (req, res) => {
       });
     }
 
-    const form = await Forms.findByPk(form_id);
+    // Archived forms can't receive new entries
+    const form = await Forms.findOne({
+      where: { id: form_id, form_archivestatus: 0 },
+    });
     if (!form) return res.status(400).json({ message: "Invalid form_id" });
 
     // 2️⃣ Validate status
@@ -342,7 +348,7 @@ export const createFormEntryBuilder = async (req, res) => {
         form_entry_site: form_entry_site || null,
         form_entry_area: form_entry_area || null,
         form_entry_date: form_entry_date || null,
-        form_entry_archivestatus: form_entry_archivestatus ?? 0,
+        form_entry_archivestatus: 0, // only admins archive, via /archive
         form_entry_status,
       },
       { transaction: t },
@@ -429,6 +435,11 @@ export const getQuestionValuesByEntryId = async (req, res) => {
   try {
     const { entryId } = req.params;
 
+    // Answers are only readable by someone who may see the entry itself
+    if (!(await findVisibleEntry(req, entryId))) {
+      return res.status(404).json({ message: "Form entry not found" });
+    }
+
     const questionValues = await FormQuestionValue.findAll({
       where: { form_entry_id: entryId },
       include: [
@@ -476,7 +487,6 @@ export const updateFormEntryBuilder = async (req, res) => {
       form_entry_site,
       form_entry_area,
       form_entry_date,
-      form_entry_archivestatus,
       form_entry_status = "draft",
       responses, // [{ form_question_id, form_value, remarks, action_item, sub_values: [] }]
     } = req.body;
@@ -584,8 +594,6 @@ export const updateFormEntryBuilder = async (req, res) => {
       form_entry_area || existingEntry.form_entry_area;
     existingEntry.form_entry_date =
       form_entry_date || existingEntry.form_entry_date;
-    existingEntry.form_entry_archivestatus =
-      form_entry_archivestatus ?? existingEntry.form_entry_archivestatus;
     existingEntry.form_entry_status = form_entry_status;
     await existingEntry.save({ transaction: t });
 
@@ -1055,7 +1063,7 @@ export const getApprovalHistory = async (req, res) => {
   try {
     const { id } = req.params;
 
-    const formEntry = await FormEntries.findByPk(id, {
+    const formEntry = await findVisibleEntry(req, id, {
       include: [
         {
           model: Users,

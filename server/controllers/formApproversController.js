@@ -16,8 +16,9 @@ export const getFormApproversByUser = async (req, res) => {
       return res.status(404).json({ message: "User not found" });
     }
 
-    // 2️⃣ Get all forms
+    // 2️⃣ Get all active forms
     const allForms = await Forms.findAll({
+      where: { form_archivestatus: 0 },
       attributes: ["id", "form_name", "form_description"],
       order: [["form_name", "ASC"]],
     });
@@ -278,9 +279,21 @@ export const updateFormApprovers = async (req, res) => {
 
     const validLevels = ["first", "second", "third"];
 
+    // This replaces ALL of the form's approvers, so every level must be sent
+    // explicitly; an empty or partial payload must not silently wipe them.
+    // (Clearing a level on purpose means sending an empty list for it.)
+    const missingLevels = validLevels.filter(
+      (level) => !Array.isArray(assignments[level]),
+    );
+    if (missingLevels.length > 0) {
+      await t.rollback();
+      return res.status(400).json({
+        message: `assignments must include first, second and third as arrays (missing: ${missingLevels.join(", ")})`,
+      });
+    }
+
     for (const level of validLevels) {
       const userIds = assignments[level];
-      if (userIds === undefined) continue;
 
       if (!Array.isArray(userIds)) {
         await t.rollback();

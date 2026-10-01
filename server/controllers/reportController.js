@@ -101,6 +101,7 @@ export const getRawAnswers = async (req, res) => {
 export const getFilterOptions = async (req, res) => {
   try {
     const forms = await Forms.findAll({
+      where: { form_archivestatus: 0 },
       attributes: ["id", "form_name"],
       order: [["form_name", "ASC"]],
     });

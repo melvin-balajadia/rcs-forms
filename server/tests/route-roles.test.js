@@ -32,6 +32,7 @@ const MATRIX = [
   ["post", "/api/forms/builder", ADMINS],
   ["put", "/api/forms/update/1", ADMINS],
   ["delete", "/api/forms/1", ADMINS],
+  ["put", "/api/forms/archive/1", ADMINS],
 
   // Form entries
   ["get", "/api/form-entries/all", ADMINS],
@@ -45,6 +46,7 @@ const MATRIX = [
   ["post", "/api/form-entries/approve", APPROVERS],
   ["post", "/api/form-entries/return", APPROVERS],
   ["delete", "/api/form-entries/1", ADMINS],
+  ["put", "/api/form-entries/archive/1", ADMINS],
 
   // Form approvers (the /user/:id GET is tested separately: self or admin)
   ["put", "/api/form-approvers/user/999", IT_ONLY],

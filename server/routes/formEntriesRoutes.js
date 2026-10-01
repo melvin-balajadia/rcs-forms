@@ -4,7 +4,7 @@ import requireRole, { ADMINS, APPROVERS } from "../middleware/requireRole.js";
 import {
   getFormEntries,
   getFormEntryById,
-  deleteFormEntry,
+  archiveFormEntry,
   formEntriesPagination,
   createFormEntryBuilder,
   updateFormEntryBuilder,
@@ -19,9 +19,12 @@ const router = express.Router();
 
 router.use(verifyJWT);
 
-// Unscoped list of every entry and hard delete — not used by the UI
+// Unscoped list of every entry — not used by the UI
 router.get("/all", requireRole(...ADMINS), getFormEntries);
-router.delete("/:id", requireRole(...ADMINS), deleteFormEntry);
+
+// Archive only — entries are never hard-deleted (DELETE kept as an alias)
+router.put("/archive/:id", requireRole(...ADMINS), archiveFormEntry);
+router.delete("/:id", requireRole(...ADMINS), archiveFormEntry);
 
 router.get("/get/:id", getFormEntryById);
 router.get("/pagination", formEntriesPagination);

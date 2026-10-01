@@ -18,7 +18,7 @@ what changed, why, and how it was verified. Updated at the end of every phase.
 | 0 — Critical hotfix | `fix/auth-critical-hotfix` | ✅ Done, pushed |
 | 1 — Authorization foundation | `refactor/server-authz-middleware` | ✅ Done |
 | 2 — Approval workflow integrity | `refactor/approval-workflow-integrity` | ✅ Done |
-| 3 — Object-level access | `refactor/object-level-access` | Planned |
+| 3 — Object-level access | `refactor/object-level-access` | ✅ Done |
 | 4 — Auth hardening | `refactor/auth-hardening` | Planned |
 | 5 — Input validation and errors | `refactor/input-validation-errors` | Planned |
 | 6 — Service layer | `refactor/server-service-layer` | Planned |
@@ -45,6 +45,8 @@ what changed, why, and how it was verified. Updated at the end of every phase.
 | Who uses User Management (create, view, edit users) | `all_access` only. `qfd_admin` may also *list* users, because the Forms edit page uses the list to pick approvers. |
 | Standalone EAV endpoints (`/questions`, `/questions-value`, `/questions-sub-value`, `/form-section`) | Kept (part of the EAV design), restricted to `all_access` and `qfd_admin`. The UI writes these tables through the builder endpoints. Removal can be revisited in Phase 6. |
 | Password reset or role change by an admin | Ends that user's sessions; they log in again. |
+| Deleting forms, entries, clients, rooms, saved reports | Never deletes data. "Delete" means **archive**: the archive status is set to 1 and the record disappears from forms, form entries, reports, clients and rooms. Only `qfd_admin` and `all_access` can archive. |
+| Saved reports | Shared: every admin sees every saved report. Only the creator can edit or refresh one; any admin can archive one. |
 | Automated tests in CI | Not yet. Tests run locally with `npm test`; adding `- run: npm test` to `.github/workflows/ci.yml` is a later decision. |
 
 ---
@@ -303,16 +305,98 @@ behavior. It fits better with the Phase 6 controller split.
 Before the fix, the new tests showed `draft → completed` succeeding. Result:
 **532 tests passing**.
 
-## Phase 3 — Object-level access *(planned)*
+## Phase 3 — Object-level access
 
-- Apply `getFormEntryVisibility` to entry reads, answers (`/entry/:id`,
-  `/raw-answers`), approval history and reports.
-- Saved reports: owner from the token, and filtered to that owner.
-- Soft delete for forms and entries, and remove the cascade from forms to entries.
-- An empty approver payload must not delete every approver on a form.
-- Form builder: tie section and question ids to the form being edited.
-- ⚠️ Overlaps `reportController.js` and `savedReports.js` with
-  `feat/report-area-comparison`.
+**Branch:** `refactor/object-level-access` (from `refactor/approval-workflow-integrity`)
+
+### Problems fixed
+
+1. **Any logged-in user could open any entry by id.** The entry *list* was
+   scoped to the user, but `GET /form-entries/get/:id`, its answers
+   (`/form-entries/entry/:id`) and its approval history weren't, so changing the
+   id in the URL showed anyone's entry, answers, remarks and approver emails.
+2. **Deletes were permanent.** `DELETE /forms/:id` hard-deleted the form and,
+   through the database cascade, every entry on it. `DELETE /form-entries/:id`
+   hard-deleted the entry.
+3. **Requestors could archive their own entries** by sending
+   `form_entry_archivestatus: 1` to create or update.
+4. **The form builder could edit other forms.** Section, question and
+   sub-question ids in a request weren't checked against the form being edited,
+   so one form's save could rename or archive another form's questions. The
+   update also used the body's `form_id` instead of the URL's, and saving a
+   form always reset it to un-archived.
+5. **An empty approver payload wiped a form's approvers.**
+   `PUT /form-approvers/form/:id` with `{}` deleted all of them.
+6. **Saved reports trusted the body for the creator**, and edit, delete and
+   refresh always failed (they read `req.userId`, which is never set).
+7. `GET /clients/all` and `GET /clients/get/:id` still returned archived clients.
+
+### Changes
+
+- **One visibility rule for single entries.** `findVisibleEntry()` in
+  `utilities/formEntryVisibility.js` applies the list's rule:
+  - requestors see their own entries;
+  - approvers also see entries on forms they're assigned to, once submitted;
+  - admins see everything.
+
+  It's used by the get, answers and approval-history endpoints, which answer
+  404 for an entry the caller can't see, without revealing whether it exists.
+- **Archive instead of delete** (admins only):
+
+  | Record | Endpoint | Hidden from |
+  |---|---|---|
+  | Form | `PUT /api/forms/archive/:id` (and `DELETE /api/forms/:id`) | form lists, the report form filter, approver assignment lists; can't receive new entries |
+  | Form entry | `PUT /api/form-entries/archive/:id` (and `DELETE /api/form-entries/:id`) | everywhere: lists, single-entry reads, dashboard, reports and raw answers, approval actions |
+  | Client, room | `PUT /api/clients/archive/:id`, `PUT /api/rooms/archive/:id` (already existed) | their lists and lookups |
+  | Saved report | `DELETE /api/saved-reports/:id` (already a soft delete) | the saved reports list |
+
+  Nothing is removed from the database. Entries use a `FormEntries` default
+  scope (`form_entry_archivestatus: 0`), so every entry query hides archived
+  entries automatically; `FormEntries.unscoped()` reaches them when needed.
+  Forms are filtered explicitly, because a scope there would also hide every
+  entry of an archived form.
+- **Entries of an archived form stay visible.** They're records of work
+  already done, and the form's structure (`GET /forms/get/:id`) stays readable
+  so they can still be opened. (Existing drafts on an archived form can still be
+  edited and submitted; only *new* entries are blocked.)
+- **Archive status is no longer accepted from create or update.** New entries
+  always start un-archived; only the archive endpoint changes it.
+- **Form builder:** both builders load the ids of the sections, questions and
+  sub-questions that belong to the form, and skip any id in the request that
+  isn't one of them. `PUT /forms/update/:id` uses the URL id, and saving a form
+  never changes its archive status.
+- **Approver assignments:** all three levels must be sent as arrays; clearing
+  a level means sending an empty list for it. The Forms page already does this.
+- **Saved reports:**
+  - the creator comes from the token;
+  - every admin still sees every saved report (shared);
+  - only the creator can edit or refresh one;
+  - any admin can archive one;
+  - the `req.userId` bug is fixed.
+
+### Merging with `feat/report-area-comparison`
+
+That branch also changes `reportController.js`, `savedReports.js`,
+`Reports.js` and `ReportsData.js`. A simulated three-way merge of all shared
+files gives **no conflicts**, and the merged files keep both sets of changes.
+
+### Tests
+
+`tests/access.test.js` (27 tests), plus the archive routes in the role matrix:
+
+- single-entry reads for requestors, approvers (assigned vs not, submitted vs
+  pending) and admins;
+- archiving entries and forms: who may archive, what's hidden where, rows still
+  in the database, `DELETE` archives, requestors can't archive through
+  create/update, archived forms refuse new entries, saving doesn't un-archive;
+- archived clients hidden;
+- form builder: another form's ids are ignored in update and in the
+  delete-flag path, the URL form id wins, and normal editing still works;
+- approver payloads with missing levels are refused;
+- saved reports: creator from token, shared list, owner-only edit/refresh,
+  archive by any admin.
+
+Result: **569 tests passing**.
 
 ## Phase 4 — Auth hardening *(planned)*
 
@@ -339,6 +423,28 @@ Before the fix, the new tests showed `draft → completed` succeeding. Result:
 - Convert manual transactions to managed ones
   (`sequelize.transaction(async (t) => …)`), moved here from Phase 2.
 - Leads into the feature refactor.
+
+---
+
+## Frontend follow-ups
+
+To do once the backend phases are finished. These come from manual testing of
+the backend changes:
+
+1. **"Not found" only appears in the browser console.** Since Phase 3, opening
+   an entry you can't see (by changing the id in the URL) returns 404 from the
+   entry, answers and approval-history endpoints. The page logs the error but
+   shows nothing. It should show a clear "Entry not found or you don't have
+   access" message (`view-form-entry.tsx`, `edit-form-entry.tsx`).
+2. **Archive buttons.** The archive endpoints exist but nothing in the UI calls
+   them yet:
+   - `PUT /api/forms/archive/:id` (Forms page)
+   - `PUT /api/form-entries/archive/:id` (Form Entry page)
+   - `PUT /api/clients/archive/:id` and `PUT /api/rooms/archive/:id` (check
+     whether those pages already have buttons)
+   - `DELETE /api/saved-reports/:id` (Reports page)
+
+   Show them only to `qfd_admin` and `all_access`, with a confirmation step.
 
 ---
 
