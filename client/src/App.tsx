@@ -33,7 +33,7 @@ const NotAuthorized = lazy(
 );
 
 import { Toaster } from "sonner";
-import { usePersistLogin } from "./hooks/userPersistLogin";
+import { useAuth } from "./context/AuthContext";
 import ProtectedRoute from "./components/protected-route";
 import RoleProtectedRoute from "./components/RoleProtectedRoute";
 
@@ -284,14 +284,10 @@ function App() {
 }
 
 function AuthWrapper({ children }: { children: React.ReactNode }) {
-  const { loading } = usePersistLogin();
-  if (loading) {
-    return (
-      <div className="flex justify-center items-center h-screen w-screen">
-        <Spinner />
-      </div>
-    );
-  }
+  const { loading } = useAuth();
+  // Spinner is already full-screen and centered; wrapping it in a flex
+  // container shrinks it to content width and shows as a gray strip.
+  if (loading) return <Spinner />;
 
   return <>{children}</>;
 }

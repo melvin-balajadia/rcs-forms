@@ -751,7 +751,24 @@ export default function EditFormEntry() {
     );
   };
 
-  if (isLoading) return null;
+  if (isLoading) {
+    return (
+      <div className="mx-6 mt-5">
+        <PageHeader
+          icon={<LuFileText className="text-2xl text-font-main" />}
+          title={pageTitle}
+          buttonText="Go Back"
+          onButtonClick={() => navigate("/form-entry")}
+          variant="default"
+        />
+        <div className="bg-white shadow-md p-4 rounded mt-1">
+          <div className="flex items-center justify-center py-12">
+            <div className="w-6 h-6 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="mx-6 mt-5">
