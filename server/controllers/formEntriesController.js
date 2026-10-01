@@ -10,6 +10,7 @@ import SubQuestion from "../Models/SubQuestion.js";
 import { Op } from "sequelize";
 import sequelize from "../utilities/db.js";
 import { getFormEntryVisibility } from "../utilities/formEntryVisibility.js";
+import { CREATE_STATUSES, canEditTo } from "../utilities/entryStatus.js";
 
 // ✅ Cross-checks a form's required questions/sub-questions against the
 // submitted responses, returning the text of any that are missing/blank.
@@ -223,15 +224,9 @@ export const createFormEntryBuilder = async (req, res) => {
     const user_id = req.user.id;
 
     const validSites = ["Taytay", "Cabuyao", "Plaridel", "Marilao", "Villasis"];
-    const validStatuses = [
-      "draft",
-      "pending",
-      "submitted_first",
-      "submitted_second",
-      "submitted_third",
-      "completed",
-      "rejected",
-    ];
+    // New entries start as draft or pending; approval stages are reached
+    // only through submit-approval and approve
+    const validStatuses = CREATE_STATUSES;
 
     // 1️⃣ Validate user + form
     const user = await Users.findByPk(user_id, {
@@ -293,8 +288,8 @@ export const createFormEntryBuilder = async (req, res) => {
     }
 
     // 4️⃣ CONDITIONAL VALIDATION based on status
-    if (form_entry_status === "pending" || form_entry_status === "completed") {
-      // STRICT validation for pending/completed forms
+    if (form_entry_status === "pending") {
+      // STRICT validation for forms being submitted
       if (!form_entry_site) {
         return res
           .status(400)
@@ -478,8 +473,6 @@ export const updateFormEntryBuilder = async (req, res) => {
   const t = await sequelize.transaction();
   try {
     const {
-      form_entry_id,
-      form_id,
       form_entry_site,
       form_entry_area,
       form_entry_date,
@@ -487,20 +480,12 @@ export const updateFormEntryBuilder = async (req, res) => {
       form_entry_status = "draft",
       responses, // [{ form_question_id, form_value, remarks, action_item, sub_values: [] }]
     } = req.body;
+    // The entry is the one in the URL, never a body-supplied form_entry_id
+    const form_entry_id = Number(req.params.entryId);
     // Ownership is checked against the logged-in user, never a body-supplied id
     const user_id = req.user.id;
 
     const validSites = ["Taytay", "Cabuyao", "Plaridel", "Marilao", "Villasis"];
-    const validStatuses = [
-      "draft",
-      "pending",
-      "returned",
-      "submitted_first",
-      "submitted_second",
-      "submitted_third",
-      "completed",
-      "rejected",
-    ];
 
     // 1️⃣ Find existing form entry
     const existingEntry = await FormEntries.findByPk(form_entry_id);
@@ -533,16 +518,21 @@ export const updateFormEntryBuilder = async (req, res) => {
         .json({ message: "Unauthorized to update this entry" });
     }
 
-    // 4️⃣ Validate status
-    if (!validStatuses.includes(form_entry_status)) {
+    // Questions and answers always belong to the entry's own form
+    const form_id = existingEntry.form_id;
+
+    // 4️⃣ Validate status: only the edits the workflow allows (entries in an
+    // approval stage, completed or rejected can't be edited)
+    const currentStatus = existingEntry.form_entry_status;
+    if (!canEditTo(currentStatus, form_entry_status)) {
       return res.status(400).json({
-        message: `Invalid status '${form_entry_status}'. Must be one of: ${validStatuses.join(", ")}.`,
+        message: `An entry that is '${currentStatus}' can't be saved as '${form_entry_status}'.`,
       });
     }
 
     // 5️⃣ Conditional validation based on status
-    if (form_entry_status === "pending" || form_entry_status === "completed") {
-      // STRICT validation for pending/completed forms
+    if (form_entry_status === "pending") {
+      // STRICT validation for forms being submitted
       if (!form_entry_site) {
         return res
           .status(400)
@@ -570,7 +560,7 @@ export const updateFormEntryBuilder = async (req, res) => {
       }
 
       const missingRequired = await findMissingRequiredAnswers(
-        form_id || existingEntry.form_id,
+        form_id,
         responses,
       );
       if (missingRequired.length > 0) {
