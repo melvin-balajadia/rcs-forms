@@ -43,6 +43,11 @@ const ReportsData = sequelize.define(
       type: DataTypes.STRING(255),
       allowNull: true,
     },
+    area_label: {
+      type: DataTypes.STRING(20),
+      allowNull: true,
+      comment: "\"Main\" or \"Annex\" for data_type: area rows",
+    },
     question_text: {
       type: DataTypes.TEXT,
       allowNull: true,

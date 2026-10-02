@@ -475,9 +475,28 @@ export default function EditForm() {
     });
   };
 
-  if (isLoading) return <div className="p-6">Loading form...</div>;
-  if (isError || !form)
-    return <div className="p-6 text-red-500">Failed to load form.</div>;
+  if (isLoading || isError || !form) {
+    return (
+      <div className="mx-6 mt-5">
+        <PageHeader
+          icon={<LuPencil className="text-2xl text-font-main" />}
+          title="Edit Form"
+          buttonText="Go Back"
+          onButtonClick={() => navigate("/forms")}
+          variant="default"
+        />
+        {isLoading ? (
+          <div className="flex items-center justify-center py-12">
+            <div className="w-6 h-6 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+          </div>
+        ) : (
+          <p className="text-center text-red-500 py-12">
+            Failed to load form.
+          </p>
+        )}
+      </div>
+    );
+  }
 
   return (
     <div className="mx-6 mt-5">

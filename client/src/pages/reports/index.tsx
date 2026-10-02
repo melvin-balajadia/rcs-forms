@@ -124,7 +124,7 @@ export default function Reports() {
       <div className="bg-white shadow-md p-4 rounded mt-1">
         {isLoading ? (
           <div className="flex justify-center items-center h-48">
-            <p className="text-gray-500">Loading reports...</p>
+            <div className="w-6 h-6 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
           </div>
         ) : reports.length === 0 ? (
           <div className="border-2 border-dashed border-gray-300 rounded-lg p-8">

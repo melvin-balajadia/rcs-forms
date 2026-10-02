@@ -306,10 +306,30 @@ export default function EditUser() {
     updateUserMutation.mutate(payload);
   };
 
-  if (!id) return <p className="p-6 text-red-500">Invalid user ID.</p>;
-  if (isLoadingUser) return <p className="p-6">Loading user data...</p>;
-  if (isErrorUser)
-    return <p className="p-6 text-red-500">Failed to fetch user.</p>;
+  if (!id || isLoadingUser || isErrorUser) {
+    return (
+      <div className="mx-6 mt-5">
+        <PageHeader
+          icon={<LuUsers className="text-2xl text-font-main" />}
+          title="Edit User"
+          buttonText="Go Back"
+          onButtonClick={() => navigate("/user-management")}
+          variant="default"
+        />
+        {!id ? (
+          <p className="text-center text-red-500 py-12">Invalid user ID.</p>
+        ) : isLoadingUser ? (
+          <div className="flex items-center justify-center py-12">
+            <div className="w-6 h-6 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+          </div>
+        ) : (
+          <p className="text-center text-red-500 py-12">
+            Failed to fetch user.
+          </p>
+        )}
+      </div>
+    );
+  }
 
   // ✅ all_access and qfd_admin can also manage approvals
   const hasApproverRole =

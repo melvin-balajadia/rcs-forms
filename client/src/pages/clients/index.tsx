@@ -98,9 +98,6 @@ export default function Clients() {
     },
   ];
 
-  if (isLoading) return <p>Loading clients...</p>;
-  if (isError) return <p>Error fetching clients!</p>;
-
   return (
     <div className="mx-6 mt-5">
       <PageHeader
@@ -112,19 +109,29 @@ export default function Clients() {
       />
 
       <div className="bg-white shadow-md p-4 rounded mt-1">
-        <PageTable<Client>
-          data={data?.clients ?? []}
-          columns={columns}
-          manualPagination
-          totalItems={data?.total ?? 0}
-          pageIndex={pageIndex}
-          pageSize={pageSize}
-          onPageChange={(newPage) => setPageIndex(newPage)}
-          onPageSizeChange={(newSize) => {
-            setPageSize(newSize);
-            setPageIndex(0);
-          }}
-        />
+        {isLoading ? (
+          <div className="flex items-center justify-center py-12">
+            <div className="w-6 h-6 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+          </div>
+        ) : isError ? (
+          <p className="text-center text-red-500 py-12">
+            Error fetching clients!
+          </p>
+        ) : (
+          <PageTable<Client>
+            data={data?.clients ?? []}
+            columns={columns}
+            manualPagination
+            totalItems={data?.total ?? 0}
+            pageIndex={pageIndex}
+            pageSize={pageSize}
+            onPageChange={(newPage) => setPageIndex(newPage)}
+            onPageSizeChange={(newSize) => {
+              setPageSize(newSize);
+              setPageIndex(0);
+            }}
+          />
+        )}
       </div>
     </div>
   );

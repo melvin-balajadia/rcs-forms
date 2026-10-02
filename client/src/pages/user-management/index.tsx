@@ -78,9 +78,6 @@ export default function UserManagement() {
     },
   ];
 
-  if (isLoading) return <p>Loading users...</p>;
-  if (isError) return <p>Error fetching users!</p>;
-
   const mappedUsers: User[] =
     data?.data.map((user) => {
       // Format the approver role for display
@@ -123,19 +120,29 @@ export default function UserManagement() {
       />
 
       <div className="bg-white shadow-md p-4 rounded mt-1">
-        <PageTable<User>
-          data={mappedUsers}
-          columns={columns}
-          manualPagination
-          totalItems={data?.total ?? 0}
-          pageIndex={pageIndex}
-          pageSize={pageSize}
-          onPageChange={(newPage) => setPageIndex(newPage)}
-          onPageSizeChange={(newSize) => {
-            setPageSize(newSize);
-            setPageIndex(0);
-          }}
-        />
+        {isLoading ? (
+          <div className="flex items-center justify-center py-12">
+            <div className="w-6 h-6 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+          </div>
+        ) : isError ? (
+          <p className="text-center text-red-500 py-12">
+            Error fetching users!
+          </p>
+        ) : (
+          <PageTable<User>
+            data={mappedUsers}
+            columns={columns}
+            manualPagination
+            totalItems={data?.total ?? 0}
+            pageIndex={pageIndex}
+            pageSize={pageSize}
+            onPageChange={(newPage) => setPageIndex(newPage)}
+            onPageSizeChange={(newSize) => {
+              setPageSize(newSize);
+              setPageIndex(0);
+            }}
+          />
+        )}
       </div>
     </div>
   );
