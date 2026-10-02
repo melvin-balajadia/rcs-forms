@@ -26,6 +26,8 @@ import { EllipsisIcon } from "lucide-react";
 type ActionButtonProps<T extends { id: string }> = {
   row: Row<T>;
   basePath: string;
+  // Hide "Edit" where the record has no edit page (e.g. saved reports)
+  showEdit?: boolean;
   // When given, the menu offers "Archive" with a confirmation step. Pages pass
   // it only to users allowed to archive, and only where archiving exists.
   archive?: {
@@ -37,6 +39,7 @@ type ActionButtonProps<T extends { id: string }> = {
 export default function ActionButton<T extends { id: string }>({
   row,
   basePath,
+  showEdit = true,
   archive,
 }: ActionButtonProps<T>) {
   const navigate = useNavigate();
@@ -56,11 +59,13 @@ export default function ActionButton<T extends { id: string }>({
         <DropdownMenuPortal>
           <DropdownMenuContent align="end" className="z-50">
             <DropdownMenuGroup>
-              <DropdownMenuItem
-                onClick={() => navigate(`${basePath}/edit/${row.original.id}`)}
-              >
-                Edit <DropdownMenuShortcut>⌘E</DropdownMenuShortcut>
-              </DropdownMenuItem>
+              {showEdit && (
+                <DropdownMenuItem
+                  onClick={() => navigate(`${basePath}/edit/${row.original.id}`)}
+                >
+                  Edit <DropdownMenuShortcut>⌘E</DropdownMenuShortcut>
+                </DropdownMenuItem>
+              )}
               <DropdownMenuItem
                 onClick={() => navigate(`${basePath}/view/${row.original.id}`)}
               >

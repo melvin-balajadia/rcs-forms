@@ -107,6 +107,8 @@ export default function Reports() {
         <ActionButton
           row={row as any}
           basePath="/reports"
+          // Saved reports have no edit page — only Details and Archive
+          showEdit={false}
           archive={
             canArchive
               ? { name: row.original.report_name, onConfirm: () => archive([row.original.id]) }
