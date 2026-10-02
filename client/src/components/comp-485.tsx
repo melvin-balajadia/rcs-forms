@@ -163,8 +163,9 @@ export default function PageTable<T extends WithId>({
     <div className="space-y-4">
       {/* Top bar */}
       <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
-        {/* Left: Search + View toggle */}
-        <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center sm:gap-3">
+        {/* Left: Search + View toggle + page filters. Wraps onto more lines
+            when they don't fit, instead of running past the card's edge. */}
+        <div className="flex w-full min-w-0 flex-col gap-2 sm:flex-1 sm:flex-row sm:flex-wrap sm:items-center sm:gap-3">
           <div className="relative w-full sm:w-auto">
             <Input
               id={`${id}-input`}
