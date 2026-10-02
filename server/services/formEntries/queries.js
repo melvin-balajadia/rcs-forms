@@ -11,6 +11,7 @@ import {
 } from "../../utilities/formEntryVisibility.js";
 import { getPagination } from "../../utilities/pagination.js";
 import { fail } from "../../utilities/http.js";
+import { isDay, manilaDayStart, addDays } from "../../utilities/manilaTime.js";
 
 // Whole days from `from` through `to` (YYYY-MM-DD, both inclusive): from the
 // start of `from` up to, but not including, the start of the day after `to`.
@@ -29,7 +30,18 @@ export const listAllEntries = () => FormEntries.findAll({ include: Users });
 // The entry list, scoped to what the caller may see, with optional filters
 export const listEntries = async (req) => {
   const { page, pageSize, offset } = getPagination(req.query);
-  const { id, user_id, form_id, site, area, from, to, status } = req.query;
+  const {
+    id,
+    user_id,
+    form_id,
+    site,
+    area,
+    from,
+    to,
+    completed_from,
+    completed_to,
+    status,
+  } = req.query;
 
   const where = {};
   if (id) where.id = id;
@@ -37,6 +49,16 @@ export const listEntries = async (req) => {
   if (site) where.form_entry_site = { [Op.like]: `%${site}%` };
   if (area) where.form_entry_area = { [Op.like]: `%${area}%` };
   if (from && to) where.form_entry_date = dayRange(from, to);
+
+  // Completed between two Manila days (the final approval's date) — what the
+  // dashboard's "accomplished per day" chart counts, so its bars link here
+  if (completed_from && completed_to) {
+    if (!isDay(completed_from) || !isDay(completed_to)) fail(400, "Invalid date range");
+    where.form_entry_thirdapprover_datetime = {
+      [Op.gte]: manilaDayStart(completed_from),
+      [Op.lt]: manilaDayStart(addDays(completed_to, 1)),
+    };
+  }
 
   // A single status or a comma-separated list (some display labels like
   // "Awaiting 2nd Approval" map to more than one underlying status)

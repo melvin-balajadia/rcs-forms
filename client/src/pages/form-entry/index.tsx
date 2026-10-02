@@ -119,7 +119,16 @@ const STATUS_FILTER_OPTIONS = [
 // Filters live in the URL (e.g. /form-entry?form_id=3&status=completed), so a
 // filtered list survives a refresh, can be shared, and can be opened from
 // other pages such as the dashboard. These are the ones the API accepts.
-const URL_FILTERS = ["form_id", "status", "site", "area", "from", "to"] as const;
+const URL_FILTERS = [
+  "form_id",
+  "status",
+  "site",
+  "area",
+  "from",
+  "to",
+  "completed_from",
+  "completed_to",
+] as const;
 // Set only by links from other pages; shown as chips with a "Clear" action
 const LINKED_FILTER_LABELS: Record<string, string> = {
   site: "Site",
@@ -138,6 +147,9 @@ export default function FormEntries() {
   const formFilter = searchParams.get("form_id") || "all";
   const dateFrom = searchParams.get("from");
   const dateTo = searchParams.get("to");
+  // Set by the dashboard's "accomplished per day" chart
+  const completedFrom = searchParams.get("completed_from");
+  const completedTo = searchParams.get("completed_to");
   const linkedFilters = Object.keys(LINKED_FILTER_LABELS)
     .map((key) => ({ key, value: searchParams.get(key) }))
     .filter((f): f is { key: string; value: string } => Boolean(f.value));
@@ -153,7 +165,13 @@ export default function FormEntries() {
 
   const clearLinkedFilters = () => {
     const next = new URLSearchParams(searchParams);
-    for (const key of [...Object.keys(LINKED_FILTER_LABELS), "from", "to"])
+    for (const key of [
+      ...Object.keys(LINKED_FILTER_LABELS),
+      "from",
+      "to",
+      "completed_from",
+      "completed_to",
+    ])
       next.delete(key);
     setSearchParams(next, { replace: true });
     setPageIndex(0);
@@ -288,7 +306,11 @@ export default function FormEntries() {
       />
 
       <div className="bg-white shadow-md p-4 rounded mt-1">
-        {(linkedFilters.length > 0 || dateFrom || dateTo) && (
+        {(linkedFilters.length > 0 ||
+          dateFrom ||
+          dateTo ||
+          completedFrom ||
+          completedTo) && (
           <div className="mb-3 flex flex-wrap items-center gap-2 text-sm">
             <span className="text-gray-500">Also filtered by:</span>
             {linkedFilters.map((f) => (
@@ -302,6 +324,14 @@ export default function FormEntries() {
             {(dateFrom || dateTo) && (
               <span className="rounded-full border border-gray-200 bg-gray-50 px-3 py-0.5 text-gray-700">
                 Date: {dateFrom ?? "…"} – {dateTo ?? "…"}
+              </span>
+            )}
+            {(completedFrom || completedTo) && (
+              <span className="rounded-full border border-gray-200 bg-gray-50 px-3 py-0.5 text-gray-700">
+                Completed on:{" "}
+                {completedFrom === completedTo
+                  ? completedFrom
+                  : `${completedFrom ?? "…"} – ${completedTo ?? "…"}`}
               </span>
             )}
             <button

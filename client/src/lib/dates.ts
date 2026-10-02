@@ -8,3 +8,19 @@ export const localDateString = (date: Date = new Date()): string => {
   const d = String(date.getDate()).padStart(2, "0");
   return `${y}-${m}-${d}`;
 };
+
+// A YYYY-MM-DD date plus n days (calendar arithmetic, no timezone involved)
+export const addDays = (day: string, n: number): string => {
+  const d = new Date(`${day}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + n);
+  return d.toISOString().slice(0, 10);
+};
+
+// "Oct 2" / "Thu, Oct 2, 2026" for a YYYY-MM-DD date
+export const formatDay = (day: string, long = false): string =>
+  new Date(`${day}T00:00:00`).toLocaleDateString(
+    "en-US",
+    long
+      ? { weekday: "short", month: "short", day: "numeric", year: "numeric" }
+      : { month: "short", day: "numeric" },
+  );
