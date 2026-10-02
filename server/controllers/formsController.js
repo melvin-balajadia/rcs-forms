@@ -4,6 +4,7 @@ import Questions from "../Models/Questions.js";
 import SubQuestion from "../Models/SubQuestion.js";
 import { Op } from "sequelize";
 import sequelize from "../utilities/db.js";
+import { getPagination } from "../utilities/pagination.js";
 
 // Get all forms (archived forms are hidden)
 export const getForms = async (req, res) => {
@@ -106,9 +107,7 @@ export const archiveForm = async (req, res) => {
 export const formsPagination = async (req, res) => {
   try {
     // Pagination Params
-    const page = parseInt(req.query.page) || 1;
-    const pageSize = parseInt(req.query.pageSize) || 10;
-    const offset = (page - 1) * pageSize;
+    const { page, pageSize, offset } = getPagination(req.query);
 
     // Filter Params
     const { id, form_name, from, to } = req.query;

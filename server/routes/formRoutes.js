@@ -11,6 +11,11 @@ import {
   submitFormBuilder,
   updateFormBuilder,
 } from "../controllers/formsController.js";
+import { validate } from "../middleware/validate.js";
+import {
+  formSchema,
+  formBuilderSchema,
+} from "../validation/schemas.js";
 
 const router = express.Router();
 
@@ -20,9 +25,9 @@ router.use(verifyJWT);
 router.get("/all", getForms);
 router.get("/pagination", formsPagination);
 router.get("/get/:id", getFormById);
-router.post("/create", requireRole(...ADMINS), createForm);
-router.post("/builder", requireRole(...ADMINS), submitFormBuilder);
-router.put("/update/:id", requireRole(...ADMINS), updateFormBuilder);
+router.post("/create", requireRole(...ADMINS), validate(formSchema), createForm);
+router.post("/builder", requireRole(...ADMINS), validate(formBuilderSchema), submitFormBuilder);
+router.put("/update/:id", requireRole(...ADMINS), validate(formBuilderSchema), updateFormBuilder);
 // Archive only — forms are never hard-deleted (DELETE kept as an alias)
 router.put("/archive/:id", requireRole(...ADMINS), archiveForm);
 router.delete("/:id", requireRole(...ADMINS), archiveForm);

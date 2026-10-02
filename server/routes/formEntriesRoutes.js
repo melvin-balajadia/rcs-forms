@@ -14,6 +14,11 @@ import {
   getApprovalHistory,
   returnFormEntry,
 } from "../controllers/formEntriesController.js";
+import { validate } from "../middleware/validate.js";
+import {
+  formEntryBuilderSchema,
+  entryActionSchema,
+} from "../validation/schemas.js";
 
 const router = express.Router();
 
@@ -28,14 +33,14 @@ router.delete("/:id", requireRole(...ADMINS), archiveFormEntry);
 
 router.get("/get/:id", getFormEntryById);
 router.get("/pagination", formEntriesPagination);
-router.post("/create-builder", createFormEntryBuilder);
-router.post("/submit-approval", submitForApproval);
-router.put("/update-builder/:entryId", updateFormEntryBuilder);
+router.post("/create-builder", validate(formEntryBuilderSchema), createFormEntryBuilder);
+router.post("/submit-approval", validate(entryActionSchema), submitForApproval);
+router.put("/update-builder/:entryId", validate(formEntryBuilderSchema), updateFormEntryBuilder);
 router.get("/entry/:entryId", getQuestionValuesByEntryId);
 router.get("/:id/approval-history", getApprovalHistory);
 
 // Requestors never approve or return entries
-router.post("/approve", requireRole(...APPROVERS), approveFormEntry);
-router.post("/return", requireRole(...APPROVERS), returnFormEntry);
+router.post("/approve", requireRole(...APPROVERS), validate(entryActionSchema), approveFormEntry);
+router.post("/return", requireRole(...APPROVERS), validate(entryActionSchema), returnFormEntry);
 
 export default router;

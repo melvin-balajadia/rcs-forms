@@ -67,7 +67,8 @@ export const getSystemOverview = async (req, res) => {
 
 export const getRecentEntries = async (req, res) => {
   try {
-    const limit = parseInt(req.query.limit) || 10;
+    // Recent-entries widget: 1–50 rows
+    const limit = Math.min(50, Math.max(1, parseInt(req.query.limit) || 10));
 
     // ✅ Same visibility scope as the Form Entries list: requestors only
     // see their own, approvers also see entries for forms they're assigned

@@ -9,6 +9,11 @@ import {
   editUser,
   resetUserPassword,
 } from "../controllers/usersController.js";
+import { validate } from "../middleware/validate.js";
+import {
+  userSchema,
+  adminResetPasswordSchema,
+} from "../validation/schemas.js";
 
 const router = express.Router();
 
@@ -22,9 +27,9 @@ router.get(
 );
 
 // User management itself is all_access only
-router.post("/create", requireRole("all_access"), createUser);
+router.post("/create", requireRole("all_access"), validate(userSchema), createUser);
 router.get("/get/:id", requireRole("all_access"), getUserById);
-router.put("/edit/:id", requireRole("all_access"), editUser);
-router.put("/reset-password/:id", requireRole("all_access"), resetUserPassword);
+router.put("/edit/:id", requireRole("all_access"), validate(userSchema), editUser);
+router.put("/reset-password/:id", requireRole("all_access"), validate(adminResetPasswordSchema), resetUserPassword);
 
 export default router;
