@@ -1,0 +1,1338 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`golden: approvers and users > approver assignment responses 1`] = `
+{
+  "formGet": {
+    "body": {
+      "approvers": {
+        "first": [
+          {
+            "email": "approver24@test.local",
+            "id": 3,
+            "name": "approver User24",
+            "roles": [
+              "approver",
+            ],
+          },
+        ],
+        "second": [
+          {
+            "email": "approver24@test.local",
+            "id": 3,
+            "name": "approver User24",
+            "roles": [
+              "approver",
+            ],
+          },
+        ],
+        "third": [
+          {
+            "email": "approver24@test.local",
+            "id": 3,
+            "name": "approver User24",
+            "roles": [
+              "approver",
+            ],
+          },
+        ],
+      },
+      "form": {
+        "description": null,
+        "id": 1,
+        "name": "Golden Form",
+      },
+    },
+    "status": 200,
+  },
+  "formPut": {
+    "body": {
+      "assignmentsCount": 2,
+      "message": "Form approvers updated successfully",
+    },
+    "status": 200,
+  },
+  "formPutIneligible": {
+    "body": {
+      "message": "User 1 is not eligible to be an approver.",
+    },
+    "status": 400,
+  },
+  "formPutNotFound": {
+    "body": {
+      "message": "Form not found",
+    },
+    "status": 404,
+  },
+  "userGet": {
+    "body": {
+      "forms": [
+        {
+          "assignments": {
+            "first": true,
+            "second": false,
+            "third": true,
+          },
+          "form_description": null,
+          "form_id": 1,
+          "form_name": "Golden Form",
+        },
+      ],
+      "user": {
+        "id": 3,
+        "name": "approver User24",
+        "roles": [
+          "approver",
+        ],
+      },
+    },
+    "status": 200,
+  },
+  "userGetAfter": {
+    "body": {
+      "forms": [
+        {
+          "assignments": {
+            "first": false,
+            "second": true,
+            "third": false,
+          },
+          "form_description": null,
+          "form_id": 1,
+          "form_name": "Golden Form",
+        },
+      ],
+      "user": {
+        "id": 3,
+        "name": "approver User24",
+        "roles": [
+          "approver",
+        ],
+      },
+    },
+    "status": 200,
+  },
+  "userPut": {
+    "body": {
+      "assignmentsCount": 1,
+      "message": "User form approvals updated successfully",
+    },
+    "status": 200,
+  },
+  "userPutBadForm": {
+    "body": {
+      "message": "Form with ID 9999 not found",
+    },
+    "status": 404,
+  },
+  "userPutBadLevel": {
+    "body": {
+      "message": "Invalid approval level: fourth",
+    },
+    "status": 400,
+  },
+  "userPutRequestor": {
+    "body": {
+      "message": "User must have 'approver', 'all_access', or 'qfd_admin' role to be assigned as an approver.",
+    },
+    "status": 400,
+  },
+}
+`;
+
+exports[`golden: approvers and users > user role-combination messages 1`] = `
+{
+  "create:all_access+approver": {
+    "body": {
+      "ErrorMessage": "all_access cannot be combined with other roles.",
+      "ErrorState": true,
+    },
+    "status": 400,
+  },
+  "create:approver": {
+    "body": {
+      "ErrorMessage": "User has been added successfully.",
+      "ErrorState": false,
+    },
+    "status": 201,
+  },
+  "create:none": {
+    "body": {
+      "ErrorMessage": "User must have at least one role!",
+      "ErrorState": true,
+    },
+    "status": 400,
+  },
+  "create:qfd_admin+approver": {
+    "body": {
+      "ErrorMessage": "qfd_admin cannot be combined with other roles.",
+      "ErrorState": true,
+    },
+    "status": 400,
+  },
+  "create:requestor+approver": {
+    "body": {
+      "ErrorMessage": "A requestor cannot also be an approver.",
+      "ErrorState": true,
+    },
+    "status": 400,
+  },
+  "create:requestor+requestor": {
+    "body": {
+      "ErrorMessage": "Requestor must be a single role.",
+      "ErrorState": true,
+    },
+    "status": 400,
+  },
+  "create:superuser": {
+    "body": {
+      "ErrorMessage": "Invalid roles: superuser. Valid roles are: requestor, approver, all_access, qfd_admin",
+      "ErrorState": true,
+    },
+    "status": 400,
+  },
+  "createDuplicate": {
+    "body": {
+      "ErrorMessage": "Username is already used.",
+      "ErrorState": true,
+    },
+    "status": 400,
+  },
+  "edit:all_access+approver": {
+    "body": {
+      "ErrorMessage": "all_access cannot be combined with other roles.",
+      "ErrorState": true,
+    },
+    "status": 400,
+  },
+  "edit:approver": {
+    "body": {
+      "ErrorMessage": "User has been updated successfully.",
+      "ErrorState": false,
+    },
+    "status": 200,
+  },
+  "edit:none": {
+    "body": {
+      "ErrorMessage": "User must have at least one role!",
+      "ErrorState": true,
+    },
+    "status": 400,
+  },
+  "edit:qfd_admin+approver": {
+    "body": {
+      "ErrorMessage": "qfd_admin cannot be combined with other roles.",
+      "ErrorState": true,
+    },
+    "status": 400,
+  },
+  "edit:requestor+approver": {
+    "body": {
+      "ErrorMessage": "A requestor cannot also be an approver.",
+      "ErrorState": true,
+    },
+    "status": 400,
+  },
+  "edit:requestor+requestor": {
+    "body": {
+      "ErrorMessage": "Requestor must be a single role.",
+      "ErrorState": true,
+    },
+    "status": 400,
+  },
+  "edit:superuser": {
+    "body": {
+      "ErrorMessage": "Invalid roles: superuser",
+      "ErrorState": true,
+    },
+    "status": 400,
+  },
+}
+`;
+
+exports[`golden: form builder > create, read, update, read 1`] = `
+{
+  "_s1Found": true,
+  "build": {
+    "body": {
+      "form_id": 2,
+      "message": "Form, sections, questions, and sub-questions submitted successfully.",
+    },
+    "status": 200,
+  },
+  "read": {
+    "body": {
+      "createdAt": "<timestamp>",
+      "form_archivestatus": 0,
+      "form_description": "desc",
+      "form_effective_date": "<timestamp>",
+      "form_name": "Built",
+      "form_revision_number": "R1",
+      "id": 2,
+      "sections": [
+        {
+          "createdAt": "<timestamp>",
+          "form_id": 2,
+          "form_section_archivestatus": 0,
+          "form_section_description": "first",
+          "form_section_id": 2,
+          "form_section_name": "S1",
+          "questions": [
+            {
+              "choices": [
+                "a",
+                "b",
+              ],
+              "createdAt": "<timestamp>",
+              "form_id": 2,
+              "form_questions": "Q1",
+              "form_questions_archivestatus": 0,
+              "form_section_id": 2,
+              "id": 3,
+              "question_type": "dropdown",
+              "required": true,
+              "subQuestions": [
+                {
+                  "choices": [],
+                  "createdAt": "<timestamp>",
+                  "question_id": 3,
+                  "question_type": "text",
+                  "required": false,
+                  "sub_question_archivestatus": 0,
+                  "sub_question_id": 2,
+                  "sub_questions": "SQ1",
+                  "updatedAt": "<timestamp>",
+                },
+              ],
+              "updatedAt": "<timestamp>",
+            },
+            {
+              "choices": [],
+              "createdAt": "<timestamp>",
+              "form_id": 2,
+              "form_questions": "Q2",
+              "form_questions_archivestatus": 0,
+              "form_section_id": 2,
+              "id": 4,
+              "question_type": "multiple",
+              "required": false,
+              "subQuestions": [],
+              "updatedAt": "<timestamp>",
+            },
+          ],
+          "updatedAt": "<timestamp>",
+        },
+        {
+          "createdAt": "<timestamp>",
+          "form_id": 2,
+          "form_section_archivestatus": 0,
+          "form_section_description": null,
+          "form_section_id": 3,
+          "form_section_name": "S2",
+          "questions": [],
+          "updatedAt": "<timestamp>",
+        },
+      ],
+      "updatedAt": "<timestamp>",
+    },
+    "status": 200,
+  },
+  "readAfter": {
+    "body": {
+      "createdAt": "<timestamp>",
+      "form_archivestatus": 0,
+      "form_description": "desc2",
+      "form_effective_date": "<timestamp>",
+      "form_name": "Built v2",
+      "form_revision_number": "R1",
+      "id": 2,
+      "sections": [
+        {
+          "createdAt": "<timestamp>",
+          "form_id": 2,
+          "form_section_archivestatus": 0,
+          "form_section_description": "first",
+          "form_section_id": 2,
+          "form_section_name": "S1 edited",
+          "questions": [
+            {
+              "choices": [
+                "a",
+              ],
+              "createdAt": "<timestamp>",
+              "form_id": 2,
+              "form_questions": "Q1 edited",
+              "form_questions_archivestatus": 0,
+              "form_section_id": 2,
+              "id": 3,
+              "question_type": "dropdown",
+              "required": true,
+              "subQuestions": [
+                {
+                  "choices": [],
+                  "createdAt": "<timestamp>",
+                  "question_id": 3,
+                  "question_type": "text",
+                  "required": false,
+                  "sub_question_archivestatus": 0,
+                  "sub_question_id": 2,
+                  "sub_questions": "SQ1 edited",
+                  "updatedAt": "<timestamp>",
+                },
+              ],
+              "updatedAt": "<timestamp>",
+            },
+          ],
+          "updatedAt": "<timestamp>",
+        },
+      ],
+      "updatedAt": "<timestamp>",
+    },
+    "status": 200,
+  },
+  "update": {
+    "body": {
+      "form_id": 2,
+      "message": "Form updated successfully.",
+    },
+    "status": 200,
+  },
+  "updateMissingId": {
+    "body": {
+      "message": "Form ID is required for update",
+    },
+    "status": 400,
+  },
+}
+`;
+
+exports[`golden: form entry flows > create as pending, then reject 1`] = `
+{
+  "created": {
+    "body": {
+      "answers": [
+        {
+          "action_item": null,
+          "createdAt": "<timestamp>",
+          "form_entry_id": 1,
+          "form_id": 1,
+          "form_question_id": 1,
+          "form_section_id": 1,
+          "form_value": "Y",
+          "id": 1,
+          "remarks": "ok",
+          "updatedAt": "<timestamp>",
+        },
+        {
+          "action_item": null,
+          "createdAt": "<timestamp>",
+          "form_entry_id": 1,
+          "form_id": 1,
+          "form_question_id": 2,
+          "form_section_id": 1,
+          "form_value": "All good",
+          "id": 2,
+          "remarks": "",
+          "updatedAt": "<timestamp>",
+        },
+      ],
+      "entry": {
+        "createdAt": "<timestamp>",
+        "form_entry_archivestatus": 0,
+        "form_entry_area": "Main",
+        "form_entry_date": "<timestamp>",
+        "form_entry_return_count": 0,
+        "form_entry_site": "Taytay",
+        "form_entry_status": "pending",
+        "form_id": 1,
+        "id": 1,
+        "updatedAt": "<timestamp>",
+        "user_id": 1,
+      },
+      "message": "Form entry saved as pending successfully",
+    },
+    "status": 201,
+  },
+  "history": {
+    "body": {
+      "formEntry": {
+        "area": "Main",
+        "date": "<timestamp>",
+        "form_name": "Golden Form",
+        "id": 1,
+        "returnCount": 0,
+        "site": "Taytay",
+        "status": "rejected",
+      },
+      "timeline": [
+        {
+          "action": "submitted",
+          "actionLabel": "Form Submitted",
+          "datetime": "<timestamp>",
+          "remarks": null,
+          "user": {
+            "email": "requestor6@test.local",
+            "id": 1,
+            "name": "requestor User6",
+          },
+        },
+        {
+          "action": "rejected",
+          "actionLabel": "Form Rejected",
+          "datetime": "<timestamp>",
+          "remarks": "no",
+          "user": {
+            "email": "approver8@test.local",
+            "id": 3,
+            "name": "approver User8",
+          },
+        },
+      ],
+    },
+    "status": 200,
+  },
+  "rejected": {
+    "body": {
+      "approver": {
+        "id": 3,
+        "name": "approver User8",
+      },
+      "formEntry": {
+        "approvalStage": "first",
+        "form_id": 1,
+        "form_name": "Golden Form",
+        "id": 1,
+        "newStatus": "rejected",
+        "previousStatus": "submitted_first",
+      },
+      "message": "Form entry rejected at first approval stage",
+    },
+    "status": 200,
+  },
+}
+`;
+
+exports[`golden: form entry flows > error responses 1`] = `
+{
+  "answersNotFound": {
+    "body": {
+      "message": "Form entry not found",
+    },
+    "status": 404,
+  },
+  "approveBadAction": {
+    "body": {
+      "message": "Invalid action. Must be 'approve' or 'reject'",
+    },
+    "status": 400,
+  },
+  "approveNotAwaiting": {
+    "body": {
+      "message": "Form entry is not awaiting approval. Current status: 'draft'",
+    },
+    "status": 400,
+  },
+  "approveNotFound": {
+    "body": {
+      "message": "Form entry not found",
+    },
+    "status": 404,
+  },
+  "approveUnassigned": {
+    "body": {
+      "message": "You are not assigned as a first approver for this form.",
+    },
+    "status": 403,
+  },
+  "createAsApprover": {
+    "body": {
+      "message": "You don't have permission to create form entries. Your current roles are: approver",
+    },
+    "status": 403,
+  },
+  "createBadStatus": {
+    "body": {
+      "message": "Invalid status 'completed'. Must be one of: draft, pending.",
+    },
+    "status": 400,
+  },
+  "createForeignQuestion": {
+    "body": {
+      "invalid": [
+        9999,
+      ],
+      "message": "Some question IDs are not part of this form",
+    },
+    "status": 400,
+  },
+  "createInvalidForm": {
+    "body": {
+      "message": "Invalid form_id",
+    },
+    "status": 400,
+  },
+  "createPendingBadSite": {
+    "body": {
+      "message": "Invalid site value 'Nowhere'. Must be one of: Taytay, Cabuyao, Plaridel, Marilao, Villasis.",
+    },
+    "status": 400,
+  },
+  "createPendingMissingRequired": {
+    "body": {
+      "message": "Please answer all required questions before submitting: Is it clean?",
+    },
+    "status": 400,
+  },
+  "createPendingNoArea": {
+    "body": {
+      "message": "Area is required for submitted forms",
+    },
+    "status": 400,
+  },
+  "createPendingNoDate": {
+    "body": {
+      "message": "Date is required for submitted forms",
+    },
+    "status": 400,
+  },
+  "createPendingNoResponses": {
+    "body": {
+      "message": "At least one response is required for submitted forms",
+    },
+    "status": 400,
+  },
+  "createPendingNoSite": {
+    "body": {
+      "message": "Site is required for submitted forms",
+    },
+    "status": 400,
+  },
+  "getNotFound": {
+    "body": {
+      "message": "Form entry not found",
+    },
+    "status": 404,
+  },
+  "historyNotFound": {
+    "body": {
+      "message": "Form entry not found",
+    },
+    "status": 404,
+  },
+  "returnMissingId": {
+    "body": {
+      "message": "form_entry_id is required",
+    },
+    "status": 400,
+  },
+  "returnNotFound": {
+    "body": {
+      "message": "Form entry not found",
+    },
+    "status": 404,
+  },
+  "returnNotReturnable": {
+    "body": {
+      "message": "Form cannot be returned. Current status: 'draft'",
+    },
+    "status": 400,
+  },
+  "returnUnassigned": {
+    "body": {
+      "message": "You are not assigned as a first approver for this form.",
+    },
+    "status": 403,
+  },
+  "submitMissingId": {
+    "body": {
+      "message": "form_entry_id is required",
+    },
+    "status": 400,
+  },
+  "submitNotFound": {
+    "body": {
+      "message": "Form entry not found",
+    },
+    "status": 404,
+  },
+  "submitNotOwner": {
+    "body": {
+      "message": "You can only submit your own form",
+    },
+    "status": 403,
+  },
+  "submitNotPending": {
+    "body": {
+      "message": "Form cannot be submitted. Current status: 'draft'",
+    },
+    "status": 400,
+  },
+  "updateBadTransition": {
+    "body": {
+      "message": "An entry that is 'draft' can't be saved as 'completed'.",
+    },
+    "status": 400,
+  },
+  "updateForeignQuestion": {
+    "body": {
+      "invalid": [
+        9999,
+      ],
+      "message": "Some question IDs are not part of this form",
+    },
+    "status": 400,
+  },
+  "updateNotFound": {
+    "body": {
+      "message": "Form entry not found",
+    },
+    "status": 404,
+  },
+  "updateNotOwner": {
+    "body": {
+      "message": "Unauthorized to update this entry",
+    },
+    "status": 403,
+  },
+}
+`;
+
+exports[`golden: form entry flows > full lifecycle responses 1`] = `
+{
+  "answers": {
+    "body": [
+      {
+        "FormQuestionSubValues": [
+          {
+            "SubQuestion": {
+              "question_id": 1,
+              "question_type": "text",
+              "sub_question_id": 1,
+              "sub_questions": "Which area?",
+            },
+            "action_item": null,
+            "createdAt": "<timestamp>",
+            "form_id": 1,
+            "form_question_id": 1,
+            "form_question_value_id": 1,
+            "form_sub_value": "Room 1",
+            "id": 2,
+            "remarks": null,
+            "sub_question_id": 1,
+            "updatedAt": "<timestamp>",
+          },
+        ],
+        "action_item": null,
+        "createdAt": "<timestamp>",
+        "form_entry_id": 1,
+        "form_id": 1,
+        "form_question_id": 1,
+        "form_section_id": 1,
+        "form_value": "N",
+        "id": 1,
+        "remarks": "ok",
+        "updatedAt": "<timestamp>",
+      },
+      {
+        "FormQuestionSubValues": [],
+        "action_item": null,
+        "createdAt": "<timestamp>",
+        "form_entry_id": 1,
+        "form_id": 1,
+        "form_question_id": 2,
+        "form_section_id": 1,
+        "form_value": "All good",
+        "id": 2,
+        "remarks": "",
+        "updatedAt": "<timestamp>",
+      },
+    ],
+    "status": 200,
+  },
+  "approve1": {
+    "body": {
+      "approver": {
+        "id": 3,
+        "name": "approver User3",
+      },
+      "formEntry": {
+        "approvalStage": "first",
+        "form_id": 1,
+        "form_name": "Golden Form",
+        "id": 1,
+        "newStatus": "approved_first",
+        "previousStatus": "submitted_first",
+      },
+      "message": "Form entry approved at first approval stage",
+    },
+    "status": 200,
+  },
+  "approveAgain1": {
+    "body": {
+      "approver": {
+        "id": 3,
+        "name": "approver User3",
+      },
+      "formEntry": {
+        "approvalStage": "first",
+        "form_id": 1,
+        "form_name": "Golden Form",
+        "id": 1,
+        "newStatus": "approved_first",
+        "previousStatus": "submitted_first",
+      },
+      "message": "Form entry approved at first approval stage",
+    },
+    "status": 200,
+  },
+  "approveAgain2": {
+    "body": {
+      "approver": {
+        "id": 3,
+        "name": "approver User3",
+      },
+      "formEntry": {
+        "approvalStage": "second",
+        "form_id": 1,
+        "form_name": "Golden Form",
+        "id": 1,
+        "newStatus": "approved_second",
+        "previousStatus": "approved_first",
+      },
+      "message": "Form entry approved at second approval stage",
+    },
+    "status": 200,
+  },
+  "approveAgain3": {
+    "body": {
+      "approver": {
+        "id": 3,
+        "name": "approver User3",
+      },
+      "formEntry": {
+        "approvalStage": "third",
+        "form_id": 1,
+        "form_name": "Golden Form",
+        "id": 1,
+        "newStatus": "completed",
+        "previousStatus": "approved_second",
+      },
+      "message": "Form entry approved at third approval stage",
+    },
+    "status": 200,
+  },
+  "createDraft": {
+    "body": {
+      "answers": [
+        {
+          "action_item": null,
+          "createdAt": "<timestamp>",
+          "form_entry_id": 1,
+          "form_id": 1,
+          "form_question_id": 1,
+          "form_section_id": 1,
+          "form_value": "Y",
+          "id": 1,
+          "remarks": "ok",
+          "updatedAt": "<timestamp>",
+        },
+        {
+          "action_item": null,
+          "createdAt": "<timestamp>",
+          "form_entry_id": 1,
+          "form_id": 1,
+          "form_question_id": 2,
+          "form_section_id": 1,
+          "form_value": "All good",
+          "id": 2,
+          "remarks": "",
+          "updatedAt": "<timestamp>",
+        },
+      ],
+      "entry": {
+        "createdAt": "<timestamp>",
+        "form_entry_archivestatus": 0,
+        "form_entry_area": null,
+        "form_entry_date": null,
+        "form_entry_return_count": 0,
+        "form_entry_site": null,
+        "form_entry_status": "draft",
+        "form_id": 1,
+        "id": 1,
+        "updatedAt": "<timestamp>",
+        "user_id": 1,
+      },
+      "message": "Form entry saved as draft successfully",
+    },
+    "status": 201,
+  },
+  "editReturned": {
+    "body": {
+      "answers": [
+        {
+          "action_item": null,
+          "createdAt": "<timestamp>",
+          "form_entry_id": 1,
+          "form_id": 1,
+          "form_question_id": 1,
+          "form_section_id": 1,
+          "form_value": "Y",
+          "id": 1,
+          "remarks": "ok",
+          "sub_values": [
+            {
+              "action_item": null,
+              "form_id": 1,
+              "form_question_id": 1,
+              "form_question_value_id": 1,
+              "form_sub_value": "Room 1",
+              "remarks": null,
+              "sub_question_id": 1,
+            },
+          ],
+          "updatedAt": "<timestamp>",
+        },
+        {
+          "action_item": null,
+          "createdAt": "<timestamp>",
+          "form_entry_id": 1,
+          "form_id": 1,
+          "form_question_id": 2,
+          "form_section_id": 1,
+          "form_value": "All good",
+          "id": 2,
+          "remarks": "",
+          "updatedAt": "<timestamp>",
+        },
+      ],
+      "entry": {
+        "createdAt": "<timestamp>",
+        "form_entry_archivestatus": 0,
+        "form_entry_area": "Main",
+        "form_entry_date": "<timestamp>",
+        "form_entry_firstapprover_datetime": "<timestamp>",
+        "form_entry_firstapprover_id": 3,
+        "form_entry_firstapprover_remarks": "fine",
+        "form_entry_last_return_level": "second",
+        "form_entry_rejector_datetime": null,
+        "form_entry_rejector_id": null,
+        "form_entry_rejector_remarks": null,
+        "form_entry_resubmitted_datetime": null,
+        "form_entry_return_count": 1,
+        "form_entry_returner_datetime": "<timestamp>",
+        "form_entry_returner_id": 3,
+        "form_entry_returner_remarks": "fix q2",
+        "form_entry_secondapprover_datetime": null,
+        "form_entry_secondapprover_id": null,
+        "form_entry_secondapprover_remarks": null,
+        "form_entry_site": "Taytay",
+        "form_entry_status": "returned",
+        "form_entry_thirdapprover_datetime": null,
+        "form_entry_thirdapprover_id": null,
+        "form_entry_thirdapprover_remarks": null,
+        "form_id": 1,
+        "id": 1,
+        "updatedAt": "<timestamp>",
+        "user_id": 1,
+      },
+      "message": "Form entry updated as returned successfully",
+    },
+    "status": 200,
+  },
+  "entry": {
+    "body": {
+      "Form": {
+        "createdAt": "<timestamp>",
+        "form_archivestatus": 0,
+        "form_description": null,
+        "form_effective_date": null,
+        "form_name": "Golden Form",
+        "form_revision_number": null,
+        "id": 1,
+        "updatedAt": "<timestamp>",
+      },
+      "User": {
+        "createdAt": "<timestamp>",
+        "id": 1,
+        "updatedAt": "<timestamp>",
+        "user_address": null,
+        "user_archivestatus": false,
+        "user_contact": null,
+        "user_department": null,
+        "user_email": "requestor1@test.local",
+        "user_firstname": "requestor",
+        "user_groups": [
+          "requestor",
+        ],
+        "user_lastname": "User1",
+        "user_middlename": null,
+        "user_reset_token": true,
+        "user_site": null,
+        "user_username": "requestor1",
+      },
+      "createdAt": "<timestamp>",
+      "form_entry_archivestatus": 0,
+      "form_entry_area": "Main",
+      "form_entry_date": "<timestamp>",
+      "form_entry_firstapprover_datetime": "<timestamp>",
+      "form_entry_firstapprover_id": 3,
+      "form_entry_firstapprover_remarks": null,
+      "form_entry_last_return_level": "second",
+      "form_entry_rejector_datetime": null,
+      "form_entry_rejector_id": null,
+      "form_entry_rejector_remarks": null,
+      "form_entry_resubmitted_datetime": "<timestamp>",
+      "form_entry_return_count": 1,
+      "form_entry_returner_datetime": "<timestamp>",
+      "form_entry_returner_id": 3,
+      "form_entry_returner_remarks": "fix q2",
+      "form_entry_secondapprover_datetime": "<timestamp>",
+      "form_entry_secondapprover_id": 3,
+      "form_entry_secondapprover_remarks": null,
+      "form_entry_site": "Taytay",
+      "form_entry_status": "completed",
+      "form_entry_thirdapprover_datetime": "<timestamp>",
+      "form_entry_thirdapprover_id": 3,
+      "form_entry_thirdapprover_remarks": null,
+      "form_id": 1,
+      "id": 1,
+      "returner": {
+        "id": 3,
+        "user_firstname": "approver",
+        "user_lastname": "User3",
+      },
+      "updatedAt": "<timestamp>",
+      "user_id": 1,
+    },
+    "status": 200,
+  },
+  "history": {
+    "body": {
+      "formEntry": {
+        "area": "Main",
+        "date": "<timestamp>",
+        "form_name": "Golden Form",
+        "id": 1,
+        "returnCount": 1,
+        "site": "Taytay",
+        "status": "completed",
+      },
+      "timeline": [
+        {
+          "action": "submitted",
+          "actionLabel": "Form Submitted",
+          "datetime": "<timestamp>",
+          "remarks": null,
+          "user": {
+            "email": "requestor1@test.local",
+            "id": 1,
+            "name": "requestor User1",
+          },
+        },
+        {
+          "action": "returned",
+          "actionLabel": "Form Returned from 2nd Approval",
+          "datetime": "<timestamp>",
+          "remarks": "fix q2",
+          "user": {
+            "email": "approver3@test.local",
+            "id": 3,
+            "name": "approver User3",
+          },
+        },
+        {
+          "action": "resubmitted",
+          "actionLabel": "Form Resubmitted",
+          "datetime": "<timestamp>",
+          "remarks": null,
+          "user": {
+            "email": "requestor1@test.local",
+            "id": 1,
+            "name": "requestor User1",
+          },
+        },
+        {
+          "action": "approved_first",
+          "actionLabel": "1st Approval - Approved",
+          "datetime": "<timestamp>",
+          "remarks": null,
+          "user": {
+            "email": "approver3@test.local",
+            "id": 3,
+            "name": "approver User3",
+          },
+        },
+        {
+          "action": "approved_second",
+          "actionLabel": "2nd Approval - Approved",
+          "datetime": "<timestamp>",
+          "remarks": null,
+          "user": {
+            "email": "approver3@test.local",
+            "id": 3,
+            "name": "approver User3",
+          },
+        },
+        {
+          "action": "approved_third",
+          "actionLabel": "3rd Approval - Approved",
+          "datetime": "<timestamp>",
+          "remarks": null,
+          "user": {
+            "email": "approver3@test.local",
+            "id": 3,
+            "name": "approver User3",
+          },
+        },
+        {
+          "action": "completed",
+          "actionLabel": "Form Completed",
+          "datetime": "<timestamp>",
+          "remarks": null,
+          "user": null,
+        },
+      ],
+    },
+    "status": 200,
+  },
+  "list": {
+    "body": {
+      "currentPage": 1,
+      "entries": [
+        {
+          "Form": {
+            "form_name": "Golden Form",
+            "id": 1,
+          },
+          "User": {
+            "id": 1,
+            "user_email": "requestor1@test.local",
+            "user_firstname": "requestor",
+            "user_lastname": "User1",
+            "user_username": "requestor1",
+          },
+          "createdAt": "<timestamp>",
+          "form_entry_archivestatus": 0,
+          "form_entry_area": "Main",
+          "form_entry_date": "<timestamp>",
+          "form_entry_firstapprover_datetime": "<timestamp>",
+          "form_entry_firstapprover_id": 3,
+          "form_entry_firstapprover_remarks": null,
+          "form_entry_last_return_level": "second",
+          "form_entry_rejector_datetime": null,
+          "form_entry_rejector_id": null,
+          "form_entry_rejector_remarks": null,
+          "form_entry_resubmitted_datetime": "<timestamp>",
+          "form_entry_return_count": 1,
+          "form_entry_returner_datetime": "<timestamp>",
+          "form_entry_returner_id": 3,
+          "form_entry_returner_remarks": "fix q2",
+          "form_entry_secondapprover_datetime": "<timestamp>",
+          "form_entry_secondapprover_id": 3,
+          "form_entry_secondapprover_remarks": null,
+          "form_entry_site": "Taytay",
+          "form_entry_status": "completed",
+          "form_entry_thirdapprover_datetime": "<timestamp>",
+          "form_entry_thirdapprover_id": 3,
+          "form_entry_thirdapprover_remarks": null,
+          "form_id": 1,
+          "id": 1,
+          "updatedAt": "<timestamp>",
+          "user_id": 1,
+        },
+      ],
+      "message": "Form entries fetched successfully",
+      "pageSize": 10,
+      "total": 1,
+      "totalPages": 1,
+    },
+    "status": 200,
+  },
+  "resubmit": {
+    "body": {
+      "formEntry": {
+        "id": 1,
+        "isResubmission": true,
+        "status": "submitted_first",
+      },
+      "message": "Form resubmitted for approval successfully",
+    },
+    "status": 200,
+  },
+  "resubmitPending": {
+    "body": {
+      "answers": [
+        {
+          "action_item": null,
+          "createdAt": "<timestamp>",
+          "form_entry_id": 1,
+          "form_id": 1,
+          "form_question_id": 1,
+          "form_section_id": 1,
+          "form_value": "Y",
+          "id": 1,
+          "remarks": "ok",
+          "sub_values": [
+            {
+              "action_item": null,
+              "form_id": 1,
+              "form_question_id": 1,
+              "form_question_value_id": 1,
+              "form_sub_value": "Room 1",
+              "remarks": null,
+              "sub_question_id": 1,
+            },
+          ],
+          "updatedAt": "<timestamp>",
+        },
+        {
+          "action_item": null,
+          "createdAt": "<timestamp>",
+          "form_entry_id": 1,
+          "form_id": 1,
+          "form_question_id": 2,
+          "form_section_id": 1,
+          "form_value": "All good",
+          "id": 2,
+          "remarks": "",
+          "updatedAt": "<timestamp>",
+        },
+      ],
+      "entry": {
+        "createdAt": "<timestamp>",
+        "form_entry_archivestatus": 0,
+        "form_entry_area": "Main",
+        "form_entry_date": "<timestamp>",
+        "form_entry_firstapprover_datetime": "<timestamp>",
+        "form_entry_firstapprover_id": 3,
+        "form_entry_firstapprover_remarks": "fine",
+        "form_entry_last_return_level": "second",
+        "form_entry_rejector_datetime": null,
+        "form_entry_rejector_id": null,
+        "form_entry_rejector_remarks": null,
+        "form_entry_resubmitted_datetime": null,
+        "form_entry_return_count": 1,
+        "form_entry_returner_datetime": "<timestamp>",
+        "form_entry_returner_id": 3,
+        "form_entry_returner_remarks": "fix q2",
+        "form_entry_secondapprover_datetime": null,
+        "form_entry_secondapprover_id": null,
+        "form_entry_secondapprover_remarks": null,
+        "form_entry_site": "Taytay",
+        "form_entry_status": "pending",
+        "form_entry_thirdapprover_datetime": null,
+        "form_entry_thirdapprover_id": null,
+        "form_entry_thirdapprover_remarks": null,
+        "form_id": 1,
+        "id": 1,
+        "updatedAt": "<timestamp>",
+        "user_id": 1,
+      },
+      "message": "Form entry updated as pending successfully",
+    },
+    "status": 200,
+  },
+  "return2": {
+    "body": {
+      "formEntry": {
+        "form_id": 1,
+        "form_name": "Golden Form",
+        "id": 1,
+        "newStatus": "returned",
+        "previousStatus": "approved_first",
+        "returnCount": 1,
+        "returnLevel": "second",
+      },
+      "message": "Form entry returned successfully. Requestor can now edit and resubmit.",
+      "returner": {
+        "id": 3,
+        "name": "approver User3",
+      },
+    },
+    "status": 200,
+  },
+  "submit": {
+    "body": {
+      "formEntry": {
+        "id": 1,
+        "isResubmission": false,
+        "status": "submitted_first",
+      },
+      "message": "Form submitted for approval successfully",
+    },
+    "status": 200,
+  },
+  "updateToPending": {
+    "body": {
+      "answers": [
+        {
+          "action_item": null,
+          "createdAt": "<timestamp>",
+          "form_entry_id": 1,
+          "form_id": 1,
+          "form_question_id": 1,
+          "form_section_id": 1,
+          "form_value": "N",
+          "id": 1,
+          "remarks": "ok",
+          "sub_values": [
+            {
+              "action_item": null,
+              "form_id": 1,
+              "form_question_id": 1,
+              "form_question_value_id": 1,
+              "form_sub_value": "Room 1",
+              "remarks": null,
+              "sub_question_id": 1,
+            },
+          ],
+          "updatedAt": "<timestamp>",
+        },
+        {
+          "action_item": null,
+          "createdAt": "<timestamp>",
+          "form_entry_id": 1,
+          "form_id": 1,
+          "form_question_id": 2,
+          "form_section_id": 1,
+          "form_value": "All good",
+          "id": 2,
+          "remarks": "",
+          "updatedAt": "<timestamp>",
+        },
+      ],
+      "entry": {
+        "createdAt": "<timestamp>",
+        "form_entry_archivestatus": 0,
+        "form_entry_area": "Main",
+        "form_entry_date": "<timestamp>",
+        "form_entry_firstapprover_datetime": null,
+        "form_entry_firstapprover_id": null,
+        "form_entry_firstapprover_remarks": null,
+        "form_entry_last_return_level": null,
+        "form_entry_rejector_datetime": null,
+        "form_entry_rejector_id": null,
+        "form_entry_rejector_remarks": null,
+        "form_entry_resubmitted_datetime": null,
+        "form_entry_return_count": 0,
+        "form_entry_returner_datetime": null,
+        "form_entry_returner_id": null,
+        "form_entry_returner_remarks": null,
+        "form_entry_secondapprover_datetime": null,
+        "form_entry_secondapprover_id": null,
+        "form_entry_secondapprover_remarks": null,
+        "form_entry_site": "Taytay",
+        "form_entry_status": "pending",
+        "form_entry_thirdapprover_datetime": null,
+        "form_entry_thirdapprover_id": null,
+        "form_entry_thirdapprover_remarks": null,
+        "form_id": 1,
+        "id": 1,
+        "updatedAt": "<timestamp>",
+        "user_id": 1,
+      },
+      "message": "Form entry updated as pending successfully",
+    },
+    "status": 200,
+  },
+}
+`;
