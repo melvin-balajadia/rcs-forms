@@ -676,8 +676,33 @@ Plan:
 
 ## Frontend follow-ups
 
-To do once the backend phases are finished. These come from manual testing of
-the backend changes:
+**Status (2026-10-02): done on `feat/dashboard-analytics`, except user
+archiving.**
+
+- **Archive.** The row menu's "Archive" asks for confirmation, then archives
+  the row. Wired on Forms, Form Entry, Reports (saved reports), Clients and
+  Rooms (`client/src/services/useArchive.ts`). It's shown only to `qfd_admin`
+  and `all_access`.
+- **Bulk archive.** The table's bulk "Delete" button was fake: it only removed
+  rows from the screen, and they came back on refresh. It's now a real
+  "Archive selected" for the same roles.
+- **User Management has no archive yet** (no backend endpoint), so the item
+  is hidden there. **Pending:** an `all_access`-only archive-user endpoint.
+  `verifyJWT`, login and refresh already reject archived users.
+- **Entry not found.** The View and Edit entry pages show "Entry not found or
+  you don't have access", with a way back to the list
+  (`pages/form-entry/entry-load-state.tsx`). 404/403 answers are no longer
+  retried, which used to keep the page on a spinner for several seconds.
+- **Deferred client items from the audit (done):**
+  - `RoleProtectedRoute` now redirects to login when there's no user, instead
+    of letting the request through, and reads the reactive `useAuth()`;
+  - Axios errors are stripped of the `Authorization` header and the request
+    body before page code can log them (`services/api.ts`);
+  - `xlsx@0.18.5` (CVE-2023-30533, CVE-2024-22363) was replaced with SheetJS
+    0.20.3 from the SheetJS CDN, since SheetJS no longer publishes to npm. The
+    Docker/CI build must be able to reach `cdn.sheetjs.com`.
+
+Original notes:
 
 1. **"Not found" only appears in the browser console.** Since Phase 3, opening
    an entry you can't see (by changing the id in the URL) returns 404 from the
@@ -714,6 +739,6 @@ Out of scope for this refactor, recorded so they aren't lost:
   locks per username.
 - Backups are unencrypted, and the backup folder has loose permissions.
 - `dev` deploys through a self-hosted runner that also hosts prod.
-- Client: `RoleProtectedRoute` lets users through when `user` is null; Axios
+- ~~Client: `RoleProtectedRoute` lets users through when `user` is null; Axios
   errors (including the bearer token) are logged to the console; `xlsx@0.18.5`
-  has known CVEs.
+  has known CVEs.~~ Done; see [Frontend follow-ups](#frontend-follow-ups).

@@ -7,6 +7,7 @@ import PageHeader from "@/components/page-header";
 import PageTable from "@/components/comp-485";
 import { Checkbox } from "@/components/ui/checkbox";
 import ActionButton from "@/components/action-button";
+import { useArchive, useCanArchive } from "@/services/useArchive";
 import { apiGet } from "@/services/api"; // ✅ use apiGet (with interceptors)
 
 type Room = {
@@ -32,6 +33,9 @@ const multiColumnFilterFn: FilterFn<Room> = (row, _columnId, filterValue) => {
 
 export default function Rooms() {
   const navigate = useNavigate();
+  // Archive (qfd_admin / all_access only): row menu and bulk "Archive selected"
+  const canArchive = useCanArchive();
+  const archive = useArchive("room");
   const [pageIndex, setPageIndex] = useState(0);
   const [pageSize, setPageSize] = useState(10);
 
@@ -100,7 +104,17 @@ export default function Rooms() {
     {
       id: "actions",
       header: () => <span className="sr-only">Actions</span>,
-      cell: ({ row }) => <ActionButton row={row} basePath="/rooms" />,
+      cell: ({ row }) => (
+        <ActionButton
+          row={row}
+          basePath="/rooms"
+          archive={
+            canArchive
+              ? { name: row.original.room_name, onConfirm: () => archive([row.original.id]) }
+              : undefined
+          }
+        />
+      ),
       enableHiding: false,
     },
   ];
@@ -126,6 +140,10 @@ export default function Rooms() {
           </p>
         ) : (
           <PageTable<Room>
+            onArchiveSelected={
+              canArchive ? (rows) => archive(rows.map((r) => r.id)) : undefined
+            }
+            itemNoun={{ one: "room", many: "rooms" }}
             data={data?.rooms ?? []}
             columns={columns}
             manualPagination

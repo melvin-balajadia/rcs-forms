@@ -2,6 +2,8 @@ import { useNavigate, useParams } from "react-router-dom";
 import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import PageHeader from "@/components/page-header";
+import EntryLoadError from "./entry-load-state";
+import { retryUnlessDenied } from "@/lib/httpErrors";
 import TextField from "@/components/textfield";
 import Button from "@/components/button";
 import { LuFileText, LuCalendarX, LuEye } from "react-icons/lu";
@@ -166,10 +168,16 @@ export default function EditFormEntry() {
   }, [user, navigate, isRequestor, isApprover]);
 
   /* ===================== FETCH FORM ENTRY ===================== */
-  const { data: formEntry, isLoading } = useQuery<FormEntry>({
+  const {
+    data: formEntry,
+    isLoading,
+    error: entryError,
+    refetch: refetchEntry,
+  } = useQuery<FormEntry>({
     queryKey: ["form-entry", entryId],
     queryFn: async () => apiGet(`/form-entries/get/${entryId}`),
     enabled: !!entryId,
+    retry: retryUnlessDenied,
   });
 
   /* ===================== FETCH APPROVAL HISTORY ===================== */
@@ -767,6 +775,17 @@ export default function EditFormEntry() {
           </div>
         </div>
       </div>
+    );
+  }
+
+  // Not found, not allowed, or failed to load: say so instead of an empty form
+  if (!formEntry) {
+    return (
+      <EntryLoadError
+        title={pageTitle}
+        error={entryError}
+        onRetry={() => void refetchEntry()}
+      />
     );
   }
 

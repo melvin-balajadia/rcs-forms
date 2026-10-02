@@ -15,7 +15,12 @@ dashboard branch contains everything:
 ```
 dev ── Phase 0 → 1 → 2 → 3 → 4 → 5 → 6 ──┐
                                           ├──► feat/dashboard-analytics
-dev ── feat/report-area-comparison ───────┘
+dev ── feat/report-area-comparison ───────┘        │
+                                                   ▼
+                                  feat/archive-and-client-fixes
+                                                   │
+                                                   ▼
+                                       feat/dashboard-widgets
 ```
 
 | # | Branch | Tip when written | What it is |
@@ -28,7 +33,9 @@ dev ── feat/report-area-comparison ───────┘
 | 6 | `refactor/input-validation-errors` | `b2058cb` | Phase 5 — validation, limits, no leaked errors |
 | 7 | `refactor/server-service-layer` | `7478818` | Phase 6 — service layer |
 | 8 | `feat/report-area-comparison` | `49773ea` | Main vs Annex report comparison, loading states |
-| 9 | `feat/dashboard-analytics` | *(in progress)* | Form filter + interactive dashboard (includes 1–8) |
+| 9 | `feat/dashboard-analytics` | `e9293ec` | Form filter + interactive dashboard, steps 1–2 (includes 1–8) |
+| 10 | `feat/archive-and-client-fixes` | *(in progress)* | Archive buttons, entry not-found page, client audit fixes (branched from 9) |
+| 11 | `feat/dashboard-widgets` | *(planned)* | Dashboard steps 3–4: to-do widgets, pipeline, turnaround, most-returned (branched from 10) |
 
 If a branch gets new commits after this was written (review fixes), its tip
 changes. That's fine; just merge the latest.
@@ -111,6 +118,11 @@ tokens don't stay usable in the meantime.
    node -e "console.log(require('crypto').randomBytes(48).toString('hex'))"
    ```
 3. Log in again and confirm everything works.
+
+**Build note (row 10):** the client now installs `xlsx` from the SheetJS CDN
+(`https://cdn.sheetjs.com/...`), because SheetJS no longer publishes to npm.
+The machine that builds the client image (the self-hosted runner) needs
+outbound HTTPS access to `cdn.sheetjs.com`.
 
 No other configuration changes are needed. The phases add no new environment
 variables, and the new packages (`helmet`, `zod`) are installed by the Docker

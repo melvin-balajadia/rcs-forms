@@ -5,6 +5,7 @@ import PageTable from "@/components/comp-485";
 import { LuNotepadText } from "react-icons/lu";
 import { Checkbox } from "@/components/ui/checkbox";
 import ActionButton from "@/components/action-button";
+import { useArchive, useCanArchive } from "@/services/useArchive";
 import { useFetch } from "@/services/useCrud";
 import type { ColumnDef, FilterFn } from "@tanstack/react-table";
 
@@ -39,6 +40,9 @@ const multiColumnFilterFn: FilterFn<Form> = (row, _columnId, filterValue) => {
 
 export default function Forms() {
   const navigate = useNavigate();
+  // Archive (qfd_admin / all_access only): row menu and bulk "Archive selected"
+  const canArchive = useCanArchive();
+  const archive = useArchive("form");
   const [pageIndex, setPageIndex] = useState(0);
   const [pageSize, setPageSize] = useState(10);
 
@@ -82,7 +86,17 @@ export default function Forms() {
     {
       id: "actions",
       header: () => <span className="sr-only">Actions</span>,
-      cell: ({ row }) => <ActionButton row={row} basePath="/forms" />,
+      cell: ({ row }) => (
+        <ActionButton
+          row={row}
+          basePath="/forms"
+          archive={
+            canArchive
+              ? { name: row.original.form_name, onConfirm: () => archive([row.original.id]) }
+              : undefined
+          }
+        />
+      ),
       enableHiding: false,
     },
   ];
@@ -116,6 +130,10 @@ export default function Forms() {
           </p>
         ) : (
           <PageTable<Form>
+            onArchiveSelected={
+              canArchive ? (rows) => archive(rows.map((r) => r.id)) : undefined
+            }
+            itemNoun={{ one: "form", many: "forms" }}
             data={mappedForms}
             columns={columns}
             manualPagination
