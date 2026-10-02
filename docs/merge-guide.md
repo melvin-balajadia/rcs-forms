@@ -17,7 +17,7 @@ dev ── Phase 0 → 1 → 2 → 3 → 4 → 5 → 6 ──┐
                                           ├──► feat/dashboard-analytics
 dev ── feat/report-area-comparison ───────┘        │
                                                    ▼
-                                  feat/archive-and-client-fixes
+                                  feat/client-improvements
                                                    │
                                                    ▼
                                        feat/dashboard-widgets
@@ -34,7 +34,7 @@ dev ── feat/report-area-comparison ───────┘        │
 | 7 | `refactor/server-service-layer` | `7478818` | Phase 6 — service layer |
 | 8 | `feat/report-area-comparison` | `49773ea` | Main vs Annex report comparison, loading states |
 | 9 | `feat/dashboard-analytics` | `e9293ec` | Form filter + interactive dashboard, steps 1–2 (includes 1–8) |
-| 10 | `feat/archive-and-client-fixes` | *(in progress)* | Archive buttons, entry not-found page, client audit fixes (branched from 9) |
+| 10 | `feat/client-improvements` | *(in progress)* | Archive buttons, user archiving (includes a backend endpoint + tests), entry not-found page, client audit fixes, UI fixes (branched from 9) |
 | 11 | `feat/dashboard-widgets` | *(planned)* | Dashboard steps 3–4: to-do widgets, pipeline, turnaround, most-returned (branched from 10) |
 
 If a branch gets new commits after this was written (review fixes), its tip

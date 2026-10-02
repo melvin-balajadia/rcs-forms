@@ -686,9 +686,23 @@ archiving.**
 - **Bulk archive.** The table's bulk "Delete" button was fake: it only removed
   rows from the screen, and they came back on refresh. It's now a real
   "Archive selected" for the same roles.
-- **User Management has no archive yet** (no backend endpoint), so the item
-  is hidden there. **Pending:** an `all_access`-only archive-user endpoint.
-  `verifyJWT`, login and refresh already reject archived users.
+- **User archiving** (`feat/client-improvements`):
+  - `PUT /api/users/archive/:id`, `all_access` only;
+  - User Management's Archive item and "Archive selected" are shown to
+    `all_access` only.
+
+  Rules, as decided:
+  1. **Nobody can archive their own account.** The server answers 400, the
+     menu doesn't offer it, and bulk archive skips it.
+  2. **The user's approver assignments are deactivated**, so they stop
+     appearing as an approver. Other approvers at the same level, and admins,
+     can still approve anything waiting.
+  3. **Archived users are hidden**: from the user list, and from get, edit and
+     reset-password (404). They also can't be assigned as approvers again.
+
+  Their sessions end immediately: the refresh token is cleared, and
+  `verifyJWT`, login and refresh already reject archived users. Nothing is
+  deleted. Tests: `tests/users-archive.test.js`.
 - **Entry not found.** The View and Edit entry pages show "Entry not found or
   you don't have access", with a way back to the list
   (`pages/form-entry/entry-load-state.tsx`). 404/403 answers are no longer
@@ -701,6 +715,18 @@ archiving.**
   - `xlsx@0.18.5` (CVE-2023-30533, CVE-2024-22363) was replaced with SheetJS
     0.20.3 from the SheetJS CDN, since SheetJS no longer publishes to npm. The
     Docker/CI build must be able to reach `cdn.sheetjs.com`.
+- **UI fixes (`feat/client-improvements`):**
+  - The table toolbar now wraps its filters instead of running past the card
+    (Form Entry and every other list page).
+  - On Create and Edit Form, the question and sub-question controls (type,
+    add, delete, Required) stay together and move below the text when a row
+    is narrow, instead of pushing the Required toggle outside the card. On a
+    phone the group wraps too: "Required" gets its own line, and the "|"
+    separator is hidden. Checked at 390–600px, with nothing sticking out.
+  - Reports: "Edit" is removed from the row menu. There's no edit page for
+    saved reports, so it led nowhere.
+- **Pending:** a full responsiveness pass (every page at phone, tablet and
+  desktop widths).
 
 Original notes:
 
