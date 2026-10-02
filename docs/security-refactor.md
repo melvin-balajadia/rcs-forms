@@ -19,7 +19,7 @@ what changed, why, and how it was verified. Updated at the end of every phase.
 | 1 — Authorization foundation | `refactor/server-authz-middleware` | ✅ Done |
 | 2 — Approval workflow integrity | `refactor/approval-workflow-integrity` | ✅ Done |
 | 3 — Object-level access | `refactor/object-level-access` | ✅ Done |
-| 4 — Auth hardening | `refactor/auth-hardening` | Planned |
+| 4 — Auth hardening | `refactor/auth-hardening` | ✅ Done |
 | 5 — Input validation and errors | `refactor/input-validation-errors` | Planned |
 | 6 — Service layer | `refactor/server-service-layer` | Planned |
 
@@ -228,6 +228,7 @@ the new role. Covered by `tests/sessions.test.js`; **416 tests passing**.
 - An invalid or expired access token returns 403, which the client doesn't treat
   as "refresh and retry" (it only retries on 401). That's harmless with today's
   5-hour tokens, but must change in Phase 4 before access tokens are shortened.
+  *(Done in Phase 4: expired tokens now return 401.)*
 
 ---
 
@@ -398,13 +399,82 @@ files gives **no conflicts**, and the merged files keep both sets of changes.
 
 Result: **569 tests passing**.
 
-## Phase 4 — Auth hardening *(planned)*
+## Phase 4 — Auth hardening
 
-- `helmet`, plus rate limiting on login, reset and refresh.
-- Store only a hash of the refresh token, and rotate it on every refresh.
-- Shorter access tokens, with expired tokens returning 401 (see Phase 1).
-- One generic login error message; password policy enforced on create and edit
-  user; remove the duplicate `bcryptjs` package.
+**Branch:** `refactor/auth-hardening` (from `refactor/object-level-access`)
+
+### Problems fixed
+
+1. **Passwords could be guessed without limit.** Nothing slowed down repeated
+   failed logins.
+2. **Login revealed which usernames exist.** "Couldn't find your account" vs
+   "Wrong password" told an attacker which usernames were real, and an unknown
+   username also answered faster, because no password check ran.
+3. **Refresh tokens were stored as-is.** Anyone with a copy of the database or
+   a backup could use them to log in as any user with an active session.
+4. **Access tokens lasted 5 hours**, and an expired one returned 403, which the
+   client doesn't recover from (it only refreshes on 401).
+5. **No security headers**, and `X-Powered-By: Express` was advertised.
+6. **Admins could create users with any password.** The password rule only
+   applied to resets.
+7. Login and refresh sent internal error details to the browser on failure.
+
+### Changes
+
+- **Login lockout** (`utilities/loginThrottle.js`): **5 failed attempts →
+  that username is locked for 15 minutes**, even for the right password. A
+  successful login resets the count. Usernames match case-insensitively, and
+  unknown usernames are locked the same way, so a lock never reveals whether an
+  account exists. The response is `429` with "Too many failed attempts. Try
+  again in N minutes."
+  - The lock is per **username**, not per IP: nginx forwards raw TCP, so every
+    request reaches the API from nginx's address (see Deferred).
+  - It's kept in memory per server process, so a restart clears all locks.
+    That's fine for one API instance per site.
+  - Trade-off: someone who knows a username can lock it for 15 minutes by
+    failing on purpose.
+- **One login error:** "Invalid username or password" for an unknown username,
+  an archived account or a wrong password. Unknown usernames are checked
+  against a dummy bcrypt hash, so they take as long to answer as a wrong
+  password.
+- **Refresh tokens are stored as a SHA-256 hash.** Login stores the hash, and
+  refresh and logout look the cookie up by its hash. **Deploying this logs
+  everyone out once**, because existing stored tokens are raw and no longer
+  match.
+- **Refresh tokens don't rotate** (decision). Rotation would mean that when
+  several requests refresh at once (several tabs open), only the first
+  succeeds and the rest log out. Hashing covers the main risk, a leaked
+  database. Rotation with a grace period can be added later without undoing
+  anything.
+- **Access tokens last 15 minutes** (login and refresh). An expired token gets
+  `401`, so the client refreshes it and retries without the user noticing. A
+  forged or malformed token still gets `403`.
+- **`helmet`** sets security headers (`X-Content-Type-Options`,
+  `X-Frame-Options`, HSTS, and others) and removes `X-Powered-By`.
+  Cross-origin resource policy is `same-site`, because the client is on the
+  same host on a different port.
+- **One password rule** (`utilities/passwordPolicy.js`) for the user's own
+  reset, an admin reset, create user and edit user: 8+ characters with an
+  uppercase letter, a number and a special character.
+- Removed the unused `bcryptjs` package. Login, refresh and logout errors are
+  logged on the server only.
+
+### Tests
+
+`tests/auth-hardening.test.js` (20 tests), all failing before the change except
+the "keeps working" ones:
+
+- same message for an unknown user and a wrong password;
+- lockout: 5 failures lock (even the right password then), 4 don't, a success
+  resets the count, only that username is locked, unknown usernames too,
+  case-insensitive, lifted after 15 minutes (tested with a simulated clock);
+- refresh tokens: the database holds the hash; refresh and logout work; the
+  hash itself is useless as a cookie;
+- access tokens last 15 minutes; expired → 401, forged → 403;
+- helmet headers present, `X-Powered-By` gone;
+- weak passwords refused on create and edit user.
+
+Result: **589 tests passing**.
 
 ## Phase 5 — Input validation and errors *(planned)*
 
@@ -459,6 +529,11 @@ Out of scope for this refactor, recorded so they aren't lost:
   environment too.
 - nginx: no security headers, loose TLS cipher list; the API port is published
   directly, so nginx can't rate-limit it.
+- **Per-IP rate limiting.** nginx forwards raw TCP (`stream` TLS passthrough)
+  without the PROXY protocol, so the API sees nginx's address for every
+  request. Per-IP limits need either `proxy_protocol on` in nginx (plus support
+  in the API's HTTPS server) or TLS termination at nginx. Until then, Phase 4
+  locks per username.
 - Backups are unencrypted, and the backup folder has loose permissions.
 - `dev` deploys through a self-hosted runner that also hosts prod.
 - Client: `RoleProtectedRoute` lets users through when `user` is null; Axios

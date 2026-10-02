@@ -2,6 +2,10 @@ import Users from "../Models/Users.js";
 import bcrypt from "bcrypt";
 import { Op } from "sequelize";
 import { rolesFingerprint } from "../utilities/session.js";
+import {
+  isStrongPassword,
+  PASSWORD_RULE_MESSAGE,
+} from "../utilities/passwordPolicy.js";
 
 export const createUser = async (req, res) => {
   try {
@@ -22,6 +26,13 @@ export const createUser = async (req, res) => {
     if (!user_username || !user_password) {
       return res.status(400).json({
         ErrorMessage: "Username or Password cannot be empty!",
+        ErrorState: true,
+      });
+    }
+
+    if (!isStrongPassword(user_password)) {
+      return res.status(400).json({
+        ErrorMessage: PASSWORD_RULE_MESSAGE,
         ErrorState: true,
       });
     }
@@ -235,6 +246,12 @@ export const editUser = async (req, res) => {
     }
 
     if (user_password && user_password.trim() !== "") {
+      if (!isStrongPassword(user_password)) {
+        return res.status(400).json({
+          ErrorMessage: PASSWORD_RULE_MESSAGE,
+          ErrorState: true,
+        });
+      }
       const salt = await bcrypt.genSalt(10);
       updateData.user_password = await bcrypt.hash(user_password, salt);
       updateData.user_reset_token = false;
@@ -269,11 +286,9 @@ export const resetUserPassword = async (req, res) => {
       });
     }
 
-    const passwordRegex = /^(?=.*[A-Z])(?=.*[0-9])(?=.*[^a-zA-Z0-9]).{8,}$/;
-    if (!passwordRegex.test(password)) {
+    if (!isStrongPassword(password)) {
       return res.status(400).json({
-        ErrorMessage:
-          "Password must be at least 8 characters and include an uppercase letter, a number, and a special character.",
+        ErrorMessage: PASSWORD_RULE_MESSAGE,
         ErrorState: true,
       });
     }
