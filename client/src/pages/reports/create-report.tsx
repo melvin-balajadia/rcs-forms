@@ -35,6 +35,7 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { apiGet, apiPost } from "@/services/api";
 import type { ColumnDef } from "@tanstack/react-table";
+import { localDateString } from "@/lib/dates";
 import {
   BarChart,
   Bar,
@@ -150,7 +151,7 @@ type ChartDataPerQuestion = {
 export default function CreateReport() {
   const { user } = useAuth();
   const navigate = useNavigate();
-  const today = new Date().toISOString().split("T")[0];
+  const today = localDateString(); // local date, not UTC
 
   // Phase 1 State
   const [formData, setFormData] = useState({

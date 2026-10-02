@@ -12,6 +12,17 @@ import {
 import { getPagination } from "../../utilities/pagination.js";
 import { fail } from "../../utilities/http.js";
 
+// Whole days from `from` through `to` (YYYY-MM-DD, both inclusive): from the
+// start of `from` up to, but not including, the start of the day after `to`.
+// Explicit bounds work on any database and for any time of day.
+const DAY = /^\d{4}-\d{2}-\d{2}$/;
+const dayRange = (from, to) => {
+  if (!DAY.test(from) || !DAY.test(to)) fail(400, "Invalid date range");
+  const end = new Date(`${to}T00:00:00Z`);
+  end.setUTCDate(end.getUTCDate() + 1);
+  return { [Op.gte]: from, [Op.lt]: end.toISOString().slice(0, 10) };
+};
+
 // Every entry (admin-only route, not used by the UI)
 export const listAllEntries = () => FormEntries.findAll({ include: Users });
 
@@ -25,7 +36,7 @@ export const listEntries = async (req) => {
   if (form_id) where.form_id = form_id;
   if (site) where.form_entry_site = { [Op.like]: `%${site}%` };
   if (area) where.form_entry_area = { [Op.like]: `%${area}%` };
-  if (from && to) where.form_entry_date = { [Op.between]: [from, to] };
+  if (from && to) where.form_entry_date = dayRange(from, to);
 
   // A single status or a comma-separated list (some display labels like
   // "Awaiting 2nd Approval" map to more than one underlying status)
