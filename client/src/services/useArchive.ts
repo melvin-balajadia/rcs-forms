@@ -6,7 +6,13 @@ import { useAuth } from "@/context/AuthContext";
 // Archiving hides a record everywhere but never deletes it. Only qfd_admin and
 // all_access may archive (the server enforces this too).
 
-type ArchiveKind = "form" | "formEntry" | "savedReport" | "client" | "room";
+type ArchiveKind =
+  | "form"
+  | "formEntry"
+  | "savedReport"
+  | "client"
+  | "room"
+  | "user"; // all_access only (User Management)
 
 type ArchiveConfig = {
   request: (id: string) => Promise<unknown>;
@@ -46,6 +52,13 @@ const ARCHIVE: Record<ArchiveKind, ArchiveConfig> = {
     one: "room",
     many: "rooms",
     refresh: [["rooms"]],
+  },
+  // Also ends the user's sessions and deactivates their approver assignments
+  user: {
+    request: (id) => api.put(`/users/archive/${id}`),
+    one: "user",
+    many: "users",
+    refresh: [["user-management"], ["approver-eligible-users"]],
   },
 };
 

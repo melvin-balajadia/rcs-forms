@@ -8,6 +8,12 @@ import {
 } from "../utilities/passwordPolicy.js";
 import { getPagination } from "../utilities/pagination.js";
 import { roleListError } from "../utilities/userRoles.js";
+import FormApprovers from "../Models/FormApprovers.js";
+import sequelize from "../utilities/db.js";
+
+// Archived users are hidden: lookups by id treat them as not found
+const findActiveUser = (id) =>
+  Users.findOne({ where: { id, user_archivestatus: false } });
 
 export const createUser = async (req, res) => {
   try {
@@ -100,7 +106,7 @@ export const editUser = async (req, res) => {
       user_password,
     } = req.body;
 
-    const user = await Users.findByPk(id);
+    const user = await findActiveUser(id);
     if (!user) {
       return res.status(404).json({
         ErrorMessage: "User not found.",
@@ -198,7 +204,7 @@ export const resetUserPassword = async (req, res) => {
       });
     }
 
-    const user = await Users.findByPk(id);
+    const user = await findActiveUser(id);
     if (!user) {
       return res.status(404).json({
         ErrorMessage: "User not found.",
@@ -233,7 +239,7 @@ export const getUserById = async (req, res) => {
   try {
     const { id } = req.params;
 
-    const user = await Users.findByPk(id);
+    const user = await findActiveUser(id);
 
     if (!user) {
       return res.status(404).json({
@@ -271,7 +277,7 @@ export const usersPagination = async (req, res) => {
       user_department,
       user_site,
     } = req.query;
-    const whereCondition = {};
+    const whereCondition = { user_archivestatus: false }; // archived users are hidden
 
     if (user_id) {
       whereCondition.user_id = user_id;
@@ -327,5 +333,53 @@ export const usersPagination = async (req, res) => {
     });
   } catch (error) {
     res.status(500).json({ message: "Error fetching paginated users", error });
+  }
+};
+
+// Archive a user (all_access only): they can no longer log in, their sessions
+// end, and their approver assignments are deactivated so they stop appearing
+// as an approver. Other approvers at the same level, and admins, can still
+// approve anything waiting. Nothing is deleted.
+export const archiveUser = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    if (String(req.user.id) === String(id)) {
+      return res.status(400).json({
+        ErrorMessage: "You can't archive your own account.",
+        ErrorState: true,
+      });
+    }
+
+    const user = await findActiveUser(id);
+    if (!user) {
+      return res.status(404).json({
+        ErrorMessage: "User not found.",
+        ErrorState: true,
+      });
+    }
+
+    await sequelize.transaction(async (transaction) => {
+      await user.update(
+        { user_archivestatus: true, user_refreshtoken: null },
+        { transaction },
+      );
+      await FormApprovers.update(
+        { is_active: false },
+        { where: { user_id: user.id }, transaction },
+      );
+    });
+
+    return res.status(200).json({
+      ErrorMessage: "User has been archived.",
+      ErrorState: false,
+    });
+  } catch (err) {
+    console.error("Backend error:", err);
+    return res.status(500).json({
+      ErrorMessage:
+        "Unable to process your request. Contact your administrator.",
+      ErrorState: true,
+    });
   }
 };
