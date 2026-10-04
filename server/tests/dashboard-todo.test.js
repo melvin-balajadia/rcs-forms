@@ -45,7 +45,7 @@ beforeEach(async () => {
 });
 
 const todo = async (who, query = "") => {
-  const res = await api.get(`/api/dashboard/todo?${query}`).set(authHeader(who));
+  const res = await api.get(`/api/dashboard/analytics?${query}`).set(authHeader(who));
   expect(res.status, JSON.stringify(res.body)).toBe(200);
   return res.body;
 };
@@ -107,8 +107,8 @@ describe("waiting for your approval", () => {
   });
 });
 
-describe("my returned entries", () => {
-  it("shows the user's own returned entries with who returned them and why", async () => {
+describe("returned entries", () => {
+  it("requestors see their own returned entries with who returned them and why", async () => {
     await entry(requestor, formA, "returned", {
       form_entry_returner_id: approver.id,
       form_entry_returner_datetime: new Date(Date.now() - 2 * DAY),
@@ -142,9 +142,79 @@ describe("my returned entries", () => {
     ]);
   });
 
-  it("returns nothing for a user without a site", async () => {
+  it("admins see every returned entry at the site, with who requested it", async () => {
+    await entry(requestor, formA, "returned");
+    await entry(other, formB, "returned");
+    await entry(other, formB, "returned", { form_entry_site: "Taytay" });
+
+    const body = await todo(qfd);
+    expect(body.returned.total).toBe(2);
+    expect(body.returned.items.map((i) => i.requested_by).sort()).toEqual(
+      [expect.stringMatching(/^requestor User/), expect.stringMatching(/^requestor User/)],
+    );
+  });
+
+  it("approvers see returned entries on their assigned forms", async () => {
+    const theirs = await entry(requestor, formA, "returned");
+    await entry(requestor, formB, "returned"); // not their form
+
+    const body = await todo(approver);
+    expect(body.returned.items.map((i) => i.id)).toEqual([theirs.id]);
+  });
+
+  it("the list is the same as the returned filter on the entry list", async () => {
+    await entry(requestor, formA, "returned");
+    await entry(other, formA, "returned");
+    await entry(requestor, formB, "returned");
+    for (const who of [requestor, approver, qfd]) {
+      const body = await todo(who);
+      const res = await api
+        .get(`/api/form-entries/pagination?status=returned&site=${body.site}`)
+        .set(authHeader(who));
+      expect(res.body.total).toBe(body.returned.total);
+    }
+  });
+
+  it("returns empty lists for a user without a site", async () => {
     const nowhere = await createUser("requestor", { user_site: null });
     const body = await todo(nowhere);
-    expect(body).toMatchObject({ site: null, waiting: null, returned: null });
+    expect(body).toMatchObject({
+      site: null,
+      waiting: null,
+      returned: { total: 0, items: [] },
+    });
+  });
+});
+
+describe("recent entries", () => {
+  const createdDaysAgo = (e, days) =>
+    sequelize.query("UPDATE form_entries SET createdAt = ? WHERE id = ?", {
+      replacements: [sqliteDate(new Date(Date.now() - days * DAY)), e.id],
+    });
+
+  it("lists the 5 newest entries at the site, newest first, any status", async () => {
+    const statuses = ["draft", "pending", "submitted_first", "completed", "returned", "rejected"];
+    const created = [];
+    for (const [i, status] of statuses.entries()) {
+      const e = await entry(requestor, i % 2 ? formA : formB, status);
+      await createdDaysAgo(e, i); // entry i was created i days ago
+      created.push(e);
+    }
+    await entry(requestor, formA, "pending", { form_entry_site: "Taytay" });
+
+    const body = await todo(qfd);
+    expect(body.recent.map((r) => r.id)).toEqual(created.slice(0, 5).map((e) => e.id));
+    expect(body.recent[0]).toMatchObject({ form_name: "Form B", status: "draft", area: "Main" });
+    expect(body.recent[0].requested_by).toMatch(/^requestor User/);
+  });
+
+  it("follows the entry visibility rules", async () => {
+    const own = await entry(requestor, formA, "pending");
+    const submitted = await entry(other, formA, "submitted_first");
+    await entry(other, formA, "pending"); // approvers can't see others' pending
+    await entry(other, formB, "submitted_first"); // not the approver's form
+
+    expect((await todo(requestor)).recent.map((r) => r.id)).toEqual([own.id]);
+    expect((await todo(approver)).recent.map((r) => r.id)).toEqual([submitted.id]);
   });
 });

@@ -3,13 +3,11 @@ import FormEntries from "../../Models/FormEntries.js";
 import FormApprovers from "../../Models/FormApprovers.js";
 import Forms from "../../Models/Forms.js";
 import Users from "../../Models/Users.js";
-import { getFormEntryVisibility } from "../../utilities/formEntryVisibility.js";
 import { hasRole } from "../../middleware/requireRole.js";
 import {
   APPROVAL_STAGES,
   SUPER_APPROVER_ROLES,
 } from "../formEntries/rules.js";
-import { resolveDashboardFilters } from "./charts.js";
 
 const LIMIT = 5;
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -18,32 +16,14 @@ const ORDINAL = { first: "1st", second: "2nd", third: "3rd" };
 const fullName = (u) => (u ? `${u.user_firstname} ${u.user_lastname}` : null);
 const daysSince = (date) => Math.max(0, Math.floor((Date.now() - new Date(date)) / DAY_MS));
 
-// The dashboard's to-do lists, for the site and area in the filter bar (the
-// date range doesn't apply: these are what's waiting right now).
-//   waiting  — entries waiting at a level this user may approve (approvers:
-//              their assigned levels; admins: every level), oldest first
-//   returned — the user's own entries sent back for corrections, newest first
-export const getDashboardTodo = async (req) => {
-  const { site, area } = resolveDashboardFilters(req.user, req.query);
-  const user = req.user;
-  const canApprove = hasRole(user, "approver", ...SUPER_APPROVER_ROLES);
+// The dashboard's to-do lists. Both ignore the date range: they're what's
+// waiting right now. `scope` is the site/area/visibility conditions (null for
+// a user without a site).
 
-  const result = { site, area: area ?? "All", waiting: null, returned: null };
-  if (!site) return result;
-
-  const { condition } = await getFormEntryVisibility(req);
-  const scope = [
-    { form_entry_site: site },
-    ...(area ? [{ form_entry_area: area }] : []),
-    ...(condition ? [condition] : []),
-  ];
-
-  if (canApprove) result.waiting = await waitingForUser(user, scope);
-  result.returned = await returnedToUser(user, scope);
-  return result;
-};
-
-const waitingForUser = async (user, scope) => {
+// Entries waiting at a level this user may approve (approvers: their assigned
+// levels; admins: every level), oldest first
+export const waitingForUser = async (user, scope) => {
+  if (!scope) return { total: 0, items: [] };
   const isAdmin = hasRole(user, ...SUPER_APPROVER_ROLES);
 
   // Approvers only see the levels they're assigned to, per form
@@ -102,15 +82,23 @@ const waitingForUser = async (user, scope) => {
   };
 };
 
-const returnedToUser = async (user, scope) => {
+// Entries sent back for corrections, newest first: the user's own (`mine`),
+// or every returned entry they may see, for monitoring
+export const returnedEntries = async (user, scope, { mine }) => {
+  if (!scope) return { total: 0, items: [] };
   const where = {
-    [Op.and]: [...scope, { user_id: user.id, form_entry_status: "returned" }],
+    [Op.and]: [
+      ...scope,
+      { form_entry_status: "returned" },
+      ...(mine ? [{ user_id: user.id }] : []),
+    ],
   };
   const total = await FormEntries.count({ where });
   const entries = await FormEntries.findAll({
     where,
     include: [
       { model: Forms, attributes: ["id", "form_name"] },
+      { model: Users, attributes: ["id", "user_firstname", "user_lastname"] },
       { model: Users, as: "returner", attributes: ["id", "user_firstname", "user_lastname"] },
     ],
     order: [["form_entry_returner_datetime", "DESC"]],
@@ -122,6 +110,7 @@ const returnedToUser = async (user, scope) => {
     items: entries.map((e) => ({
       id: e.id,
       form_name: e.Form?.form_name ?? `Form #${e.form_id}`,
+      requested_by: fullName(e.User),
       returned_by: fullName(e.returner),
       returned_at: e.form_entry_returner_datetime,
       level_label: e.form_entry_last_return_level
@@ -131,4 +120,27 @@ const returnedToUser = async (user, scope) => {
       area: e.form_entry_area,
     })),
   };
+};
+
+// The newest entries the user may see (any status), newest first
+export const recentEntries = async (scope) => {
+  if (!scope) return [];
+  const entries = await FormEntries.findAll({
+    where: { [Op.and]: scope },
+    include: [
+      { model: Forms, attributes: ["id", "form_name"] },
+      { model: Users, attributes: ["id", "user_firstname", "user_lastname"] },
+    ],
+    attributes: ["id", "form_id", "form_entry_status", "form_entry_area", "createdAt"],
+    order: [["createdAt", "DESC"], ["id", "DESC"]],
+    limit: LIMIT,
+  });
+  return entries.map((e) => ({
+    id: e.id,
+    form_name: e.Form?.form_name ?? `Form #${e.form_id}`,
+    status: e.form_entry_status,
+    area: e.form_entry_area,
+    requested_by: fullName(e.User),
+    created_at: e.createdAt,
+  }));
 };
