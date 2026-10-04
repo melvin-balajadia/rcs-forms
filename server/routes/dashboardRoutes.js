@@ -8,6 +8,7 @@ import {
 import verifyJWT from "../middleware/verifyJWT.js";
 import { handle } from "../utilities/http.js";
 import { getDashboardCharts } from "../services/dashboard/charts.js";
+import { getDashboardTodo } from "../services/dashboard/todo.js";
 
 const router = express.Router();
 
@@ -28,6 +29,14 @@ router.get(
   handle(async (req, res) => {
     res.status(200).json(await getDashboardCharts(req));
   }, "Error fetching dashboard charts"),
+);
+
+// To-do lists: waiting for my approval / my returned entries (?site&area)
+router.get(
+  "/todo",
+  handle(async (req, res) => {
+    res.status(200).json(await getDashboardTodo(req));
+  }, "Error fetching dashboard to-do"),
 );
 
 export default router;

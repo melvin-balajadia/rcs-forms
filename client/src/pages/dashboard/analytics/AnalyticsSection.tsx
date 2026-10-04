@@ -7,7 +7,8 @@ import ChartCard from "./ChartCard";
 import AccomplishedChart, { AccomplishedTable } from "./AccomplishedChart";
 import EntriesByFormChart from "./EntriesByFormChart";
 import { useDashboardFilters } from "./useDashboardFilters";
-import type { AreaKey, DashboardCharts } from "./types";
+import { ReturnedCard, WaitingCard } from "./TodoCards";
+import type { AreaKey, DashboardCharts, DashboardTodo } from "./types";
 
 const plural = (n: number, one: string, many: string) =>
   `${n.toLocaleString()} ${n === 1 ? one : many}`;
@@ -26,6 +27,17 @@ export default function AnalyticsSection() {
     queryKey: ["dashboard-charts", query.toString()],
     queryFn: () => apiGet<DashboardCharts>(`/dashboard/charts?${query}`),
     // Keep the current charts on screen (dimmed) while the next ones load
+    placeholderData: keepPreviousData,
+  });
+
+  // To-do lists follow the site and area (not the date range: they're what's
+  // waiting right now)
+  const todoQuery = new URLSearchParams();
+  if (area !== "All") todoQuery.set("area", area);
+  if (site) todoQuery.set("site", site);
+  const { data: todo, isFetching: isFetchingTodo } = useQuery<DashboardTodo>({
+    queryKey: ["dashboard-todo", todoQuery.toString()],
+    queryFn: () => apiGet<DashboardTodo>(`/dashboard/todo?${todoQuery}`),
     placeholderData: keepPreviousData,
   });
 
@@ -106,6 +118,19 @@ export default function AnalyticsSection() {
             >
               <AccomplishedChart data={data.accomplished} area={data.area} onDrill={drillDay} />
             </ChartCard>
+
+            {/* To-do: approvers/admins get their approval queue; requestors
+                (and anyone with returned entries) get what to fix */}
+            <div
+              className={`flex flex-col gap-4 transition-opacity ${isFetchingTodo ? "opacity-60" : ""}`}
+              aria-busy={isFetchingTodo}
+            >
+              {!todo && <div className="h-[360px] animate-pulse rounded-lg bg-gray-100" />}
+              {todo?.waiting && <WaitingCard data={todo.waiting} scope={todo} />}
+              {todo?.returned && (todo.waiting === null || todo.returned.total > 0) && (
+                <ReturnedCard data={todo.returned} scope={todo} />
+              )}
+            </div>
 
             <ChartCard
               title={data.scope === "mine" ? "My entries per form" : "Entries per form"}

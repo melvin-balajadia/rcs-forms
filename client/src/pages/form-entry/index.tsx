@@ -16,6 +16,7 @@ import ActionButton from "@/components/action-button";
 import { useArchive, useCanArchive } from "@/services/useArchive";
 import { apiGet } from "@/services/api";
 import { useNavigate, useSearchParams } from "react-router-dom";
+import { AWAITING_ANY_LEVEL } from "@/lib/entryStatuses";
 
 type FormEntry = {
   id: string;
@@ -110,6 +111,8 @@ const STATUS_FILTER_OPTIONS = [
   { label: "Draft", value: "draft" },
   { label: "Pending Submission", value: "pending" },
   { label: "Returned for Correction", value: "returned" },
+  // Used by the dashboard's "Waiting for your approval" link
+  { label: "Awaiting Approval (any level)", value: AWAITING_ANY_LEVEL },
   { label: "Awaiting 1st Approval", value: "submitted_first" },
   { label: "Awaiting 2nd Approval", value: "approved_first,submitted_second" },
   { label: "Awaiting 3rd Approval", value: "approved_second,submitted_third" },
