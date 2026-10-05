@@ -7,6 +7,7 @@ import {
   PASSWORD_RULE_MESSAGE,
 } from "../utilities/passwordPolicy.js";
 import { getPagination } from "../utilities/pagination.js";
+import { roleListError } from "../utilities/userRoles.js";
 
 export const createUser = async (req, res) => {
   try {
@@ -38,60 +39,9 @@ export const createUser = async (req, res) => {
       });
     }
 
-    if (
-      !user_groups ||
-      !Array.isArray(user_groups) ||
-      user_groups.length === 0
-    ) {
-      return res.status(400).json({
-        ErrorMessage: "User must have at least one role!",
-        ErrorState: true,
-      });
-    }
-
-    const validRoles = ["requestor", "approver", "all_access", "qfd_admin"];
-
-    const invalidRoles = user_groups.filter(
-      (role) => !validRoles.includes(role),
-    );
-    if (invalidRoles.length > 0) {
-      return res.status(400).json({
-        ErrorMessage: `Invalid roles: ${invalidRoles.join(", ")}. Valid roles are: ${validRoles.join(", ")}`,
-        ErrorState: true,
-      });
-    }
-
-    const hasRequestor = user_groups.includes("requestor");
-    const hasApprover = user_groups.includes("approver");
-    const hasAllAccess = user_groups.includes("all_access");
-    const hasQfdAdmin = user_groups.includes("qfd_admin");
-
-    if (hasAllAccess && user_groups.length > 1) {
-      return res.status(400).json({
-        ErrorMessage: "all_access cannot be combined with other roles.",
-        ErrorState: true,
-      });
-    }
-
-    if (hasQfdAdmin && user_groups.length > 1) {
-      return res.status(400).json({
-        ErrorMessage: "qfd_admin cannot be combined with other roles.",
-        ErrorState: true,
-      });
-    }
-
-    if (hasRequestor && hasApprover) {
-      return res.status(400).json({
-        ErrorMessage: "A requestor cannot also be an approver.",
-        ErrorState: true,
-      });
-    }
-
-    if (hasRequestor && user_groups.length > 1) {
-      return res.status(400).json({
-        ErrorMessage: "Requestor must be a single role.",
-        ErrorState: true,
-      });
+    const roleError = roleListError(user_groups, { listValidRoles: true });
+    if (roleError) {
+      return res.status(400).json({ ErrorMessage: roleError, ErrorState: true });
     }
 
     const existingUser = await Users.findOne({ where: { user_username } });
@@ -158,57 +108,11 @@ export const editUser = async (req, res) => {
       });
     }
 
+    // Roles are optional on edit; when sent they must be a valid combination
     if (user_groups) {
-      if (!Array.isArray(user_groups) || user_groups.length === 0) {
-        return res.status(400).json({
-          ErrorMessage: "User must have at least one role!",
-          ErrorState: true,
-        });
-      }
-
-      const validRoles = ["requestor", "approver", "all_access", "qfd_admin"];
-
-      const invalidRoles = user_groups.filter(
-        (role) => !validRoles.includes(role),
-      );
-      if (invalidRoles.length > 0) {
-        return res.status(400).json({
-          ErrorMessage: `Invalid roles: ${invalidRoles.join(", ")}`,
-          ErrorState: true,
-        });
-      }
-
-      const hasRequestor = user_groups.includes("requestor");
-      const hasApprover = user_groups.includes("approver");
-      const hasAllAccess = user_groups.includes("all_access");
-      const hasQfdAdmin = user_groups.includes("qfd_admin");
-
-      if (hasAllAccess && user_groups.length > 1) {
-        return res.status(400).json({
-          ErrorMessage: "all_access cannot be combined with other roles.",
-          ErrorState: true,
-        });
-      }
-
-      if (hasQfdAdmin && user_groups.length > 1) {
-        return res.status(400).json({
-          ErrorMessage: "qfd_admin cannot be combined with other roles.",
-          ErrorState: true,
-        });
-      }
-
-      if (hasRequestor && hasApprover) {
-        return res.status(400).json({
-          ErrorMessage: "A requestor cannot also be an approver.",
-          ErrorState: true,
-        });
-      }
-
-      if (hasRequestor && user_groups.length > 1) {
-        return res.status(400).json({
-          ErrorMessage: "Requestor must be a single role.",
-          ErrorState: true,
-        });
+      const roleError = roleListError(user_groups);
+      if (roleError) {
+        return res.status(400).json({ ErrorMessage: roleError, ErrorState: true });
       }
     }
 

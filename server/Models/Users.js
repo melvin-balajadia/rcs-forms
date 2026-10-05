@@ -1,6 +1,7 @@
 import { DataTypes } from "sequelize";
 import sequelize from "../utilities/db.js";
 import FormApprovers from "./FormApprovers.js";
+import { roleListError } from "../utilities/userRoles.js";
 
 const Users = sequelize.define(
   "Users",
@@ -42,49 +43,10 @@ const Users = sequelize.define(
       allowNull: false,
       defaultValue: ["requestor"],
       validate: {
+        // Same rules as create/edit user (utilities/userRoles.js)
         isValidRoles(value) {
-          const validRoles = [
-            "requestor",
-            "approver",
-            "all_access",
-            "qfd_admin",
-          ];
-
-          if (!Array.isArray(value)) {
-            throw new Error("user_groups must be an array");
-          }
-
-          if (value.length === 0) {
-            throw new Error("User must have at least one role");
-          }
-
-          const invalidRoles = value.filter(
-            (role) => !validRoles.includes(role),
-          );
-          if (invalidRoles.length > 0) {
-            throw new Error(`Invalid roles: ${invalidRoles.join(", ")}`);
-          }
-
-          const hasRequestor = value.includes("requestor");
-          const hasApprover = value.includes("approver");
-          const hasAllAccess = value.includes("all_access");
-          const hasQfdAdmin = value.includes("qfd_admin");
-
-          if (hasAllAccess && value.length > 1) {
-            throw new Error("all_access cannot be combined with other roles");
-          }
-
-          if (hasQfdAdmin && value.length > 1) {
-            throw new Error("qfd_admin cannot be combined with other roles");
-          }
-
-          if (hasRequestor && hasApprover) {
-            throw new Error("A requestor cannot also be an approver");
-          }
-
-          if (hasRequestor && value.length > 1) {
-            throw new Error("Requestor cannot be combined with other roles");
-          }
+          const error = roleListError(value);
+          if (error) throw new Error(error);
         },
       },
       comment:

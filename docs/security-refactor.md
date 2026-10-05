@@ -21,7 +21,7 @@ what changed, why, and how it was verified. Updated at the end of every phase.
 | 3 — Object-level access | `refactor/object-level-access` | ✅ Done |
 | 4 — Auth hardening | `refactor/auth-hardening` | ✅ Done |
 | 5 — Input validation and errors | `refactor/input-validation-errors` | ✅ Done |
-| 6 — Service layer | `refactor/server-service-layer` | Planned |
+| 6 — Service layer | `refactor/server-service-layer` | ✅ Done (reports part waits for the feature merge) |
 
 ## Pending operations
 
@@ -553,13 +553,83 @@ Result: **589 tests passing**.
 
 Result: **614 tests passing**.
 
-## Phase 6 — Service layer *(planned)*
+## Phase 6 — Service layer
 
-- Split the large controllers (`formEntriesController.js` ~1,400 lines,
-  `reportController.js` ~840) into services; shared pagination and response
-  helpers.
-- Convert manual transactions to managed ones
-  (`sequelize.transaction(async (t) => …)`), moved here from Phase 2.
+**Branch:** `refactor/server-service-layer` (from `refactor/input-validation-errors`)
+
+A pure restructuring: no endpoint changes what it returns. Controllers now
+only read the request, call a service and send the response; the logic lives
+in `server/services/`.
+
+### Safety net: golden tests
+
+Before anything moved, `tests/golden.test.js` recorded the exact responses
+(status + body, timestamps normalized) of the main flows, stored in
+`tests/__snapshots__/golden.test.js.snap`:
+
+- the full entry lifecycle: draft → pending → submit → approve → return →
+  edit → resubmit → approve ×3, then the history, the entry and the list;
+- create as pending → reject;
+- 29 error responses (every validation, permission and not-found message);
+- the form builder: create, read, update, read;
+- approver assignments, and the user role-combination messages.
+
+All of them match after the refactor. **If a snapshot ever changes, the
+client sees a different response:** either fix the code, or review the change
+deliberately and update the snapshot with `npx vitest run -u`.
+
+### Changes
+
+| Before | After |
+|---|---|
+| `formEntriesController.js`, 1,428 lines | 78-line controller + `services/formEntries/`: `rules.js` (sites, role groups, approval stages, entry-detail checks), `answers.js`, `entries.js`, `approvals.js`, `history.js`, `queries.js` |
+| Answers and sub-answers saved by two copies (create and update) | One `saveAnswers()` |
+| Status → approval level mapping written out in approve and in return | One `APPROVAL_STAGES` table |
+| `formsController.js`, 643 lines; the two builders duplicated the section → question → sub-question logic | 53-line controller + `services/forms/builder.js` (one walker; `/builder` honors delete flags, `/update/:id` archives omitted rows) and `services/forms/queries.js` |
+| `formApproversController.js`, 377 lines | 47-line controller + `services/formApprovers.js` |
+| Role-combination rules copied in create user, edit user and the `Users` model | `utilities/userRoles.js` |
+| 8 manual transactions (`commit`/`rollback` + Phase 1's `finally` safety net) | Managed `sequelize.transaction(async (t) => …)`: they commit on success and roll back on any thrown error |
+| Errors returned from deep inside long handlers | Services throw `HttpError` (`utilities/http.js`) with the same body; `handle()` sends it, or a generic 500 for anything unexpected |
+
+Overall, the four controllers went from 2,875 lines to 509, and the services
+add 1,380 lines.
+
+**Removed dead code:** `getPendingApprovals` (no route pointed to it) and
+`updateForm` (same).
+
+**One deliberate tightening:** create-builder now checks that each
+sub-answer's `sub_question_id` belongs to its question, which update-builder
+always did. Only invalid input is affected.
+
+### Bug fixed: `returnCount` in the return response
+
+Found while reading the code for the refactor. After an entry's first return,
+`POST /api/form-entries/return` answered `returnCount: 2`, while the approval
+history and the database said 1: the code added 1 to a count it had already
+incremented. The UI wasn't affected, because it shows the count from the entry
+(`form_entry_return_count`).
+
+The refactor kept the old value first, so the golden tests could prove nothing
+else changed. The bug was then fixed on its own: one line in
+`services/formEntries/approvals.js`. The golden snapshot was updated
+deliberately; its only difference is `returnCount: 2 → 1`. A test now checks
+that the response and the history agree after the first and second returns.
+
+### Tests
+
+The golden tests (6), plus 3 more:
+
+- a failed answer rolls back the whole entry;
+- create checks sub-question ids;
+- the return count matches the history.
+
+All earlier tests are unchanged. Result: **623 tests passing**.
+
+### Still to do (after merging `feat/report-area-comparison`)
+
+- `reportController.js` and `savedReports.js` get the same treatment, together
+  with the report rewrite below. Both files are changed on the feature branch,
+  so they were left alone here.
 - **Reports at scale.** `form_question_values` (the EAV answers table) is
   expected to grow large. Today the report endpoints load every matching
   answer row into the API's memory and count them in JavaScript, and the

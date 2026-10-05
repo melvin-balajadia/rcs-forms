@@ -3,6 +3,7 @@ import FormEntries from "../Models/FormEntries.js";
 import FormSection from "../Models/FormSection.js";
 import Questions from "../Models/Questions.js";
 import FormQuestionValue from "../Models/FormQuestionValue.js";
+import SubQuestion from "../Models/SubQuestion.js";
 import { EDIT_TRANSITIONS } from "../utilities/entryStatus.js";
 import {
   api,
@@ -186,6 +187,82 @@ describe("entry status rules", () => {
       expect(
         await FormQuestionValue.count({ where: { form_entry_id: entry.id } }),
       ).toBe(0);
+    });
+  });
+
+  describe("return count", () => {
+    it("the return response reports the same count as the history", async () => {
+      await assignApprover(form, approver, "first");
+      const entry = await entryIn("submitted_first");
+      const returnIt = () =>
+        api
+          .post("/api/form-entries/return")
+          .set(authHeader(approver))
+          .send({ form_entry_id: entry.id, remarks: "fix" });
+      const historyCount = async () =>
+        (
+          await api
+            .get(`/api/form-entries/${entry.id}/approval-history`)
+            .set(authHeader(owner))
+        ).body.formEntry.returnCount;
+
+      const first = await returnIt();
+      expect(first.body.formEntry.returnCount).toBe(1);
+      expect(await historyCount()).toBe(1);
+
+      // Back into approval (as a resubmission would), then return again
+      await entry.reload();
+      await entry.update({ form_entry_status: "submitted_first" });
+      const second = await returnIt();
+      expect(second.body.formEntry.returnCount).toBe(2);
+      expect(await historyCount()).toBe(2);
+    });
+  });
+
+  describe("answers are saved in one transaction (Phase 6)", () => {
+    it("create-builder: an invalid answer leaves no half-created entry", async () => {
+      const res = await api
+        .post("/api/form-entries/create-builder")
+        .set(authHeader(owner))
+        .send({
+          form_id: form.id,
+          form_entry_status: "draft",
+          responses: [{ form_question_id: 99999, form_value: "x" }],
+        });
+      expect(res.status).toBe(400);
+      expect(await FormEntries.unscoped().count()).toBe(0);
+    });
+
+    it("create-builder checks sub-question ids like update always did", async () => {
+      const otherForm = await createForm({ form_name: "Other" });
+      const otherQ = await addQuestion(otherForm, "Other question");
+      const foreignSub = await SubQuestion.create({
+        question_id: otherQ.id,
+        sub_questions: "Foreign sub-question",
+      });
+
+      const res = await api
+        .post("/api/form-entries/create-builder")
+        .set(authHeader(owner))
+        .send({
+          form_id: form.id,
+          form_entry_status: "draft",
+          responses: [
+            {
+              form_question_id: question.id,
+              form_value: "Y",
+              sub_values: [
+                { sub_question_id: foreignSub.sub_question_id, form_sub_value: "x" },
+              ],
+            },
+          ],
+        });
+      expect(res.status).toBe(400);
+      expect(res.body.message).toBe(
+        "Some sub-question IDs are not part of this question",
+      );
+      expect(await FormEntries.unscoped().count()).toBe(0);
+      expect(await FormQuestionValue.count()).toBe(0);
     });
   });
 
