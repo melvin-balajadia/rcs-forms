@@ -17,7 +17,7 @@ what changed, why, and how it was verified. Updated at the end of every phase.
 |---|---|---|
 | 0 — Critical hotfix | `fix/auth-critical-hotfix` | ✅ Done, pushed |
 | 1 — Authorization foundation | `refactor/server-authz-middleware` | ✅ Done |
-| 2 — Approval workflow integrity | `refactor/approval-workflow-integrity` | Planned |
+| 2 — Approval workflow integrity | `refactor/approval-workflow-integrity` | ✅ Done |
 | 3 — Object-level access | `refactor/object-level-access` | Planned |
 | 4 — Auth hardening | `refactor/auth-hardening` | Planned |
 | 5 — Input validation and errors | `refactor/input-validation-errors` | Planned |
@@ -229,15 +229,79 @@ the new role. Covered by `tests/sessions.test.js`; **416 tests passing**.
 
 ---
 
-## Phase 2 — Approval workflow integrity *(planned)*
+## Phase 2 — Approval workflow integrity
 
-- One explicit table of allowed status changes per role. Create only accepts
-  `draft`/`pending`; updates only while `draft`/`pending`/`returned`, using the
-  entry's stored `form_id`.
-- Convert the remaining manual transactions to managed ones
-  (`sequelize.transaction(async (t) => …)`).
-- Per the decisions above, admins may approve their own entries and one person
-  may approve several levels.
+**Branch:** `refactor/approval-workflow-integrity` (from `refactor/server-authz-middleware`)
+
+### Problems fixed
+
+1. **Entries could skip the approval workflow.** `create-builder` accepted any
+   status from the request body, including `completed`, so a requestor could
+   create an entry that was already completed. `update-builder` let the owner
+   set any status at any time: a draft could be saved straight as `completed`,
+   and an entry in an approval stage could be moved back to `draft`.
+2. **Answers on approved or completed entries could be rewritten**, because
+   `update-builder` didn't check the entry's current status.
+3. **`update-builder` trusted the body for which entry and form to use.** It
+   used `form_entry_id` from the body instead of the `:entryId` in the URL, and
+   checked questions against the body's `form_id`, so a request could attach
+   another form's questions to an entry.
+
+### The workflow
+
+```
+draft ⇄ pending ──submit──► submitted_first ──approve──► approved_first ──approve──► approved_second ──approve──► completed
+                                  │                          │                          │
+                                  └──────── return ──────────┴──────────────────────────┴──► returned ──edit──► pending (resubmit)
+                                  └──────── reject ──────────┴──────────────────────────┴──► rejected
+```
+
+`completed` and `rejected` are final. The rules for the requestor-side
+endpoints live in one place, `utilities/entryStatus.js`:
+
+| Endpoint | Entry's current status | May be saved as |
+|---|---|---|
+| `create-builder` | (new) | `draft`, `pending` |
+| `update-builder` (owner only) | `draft` | `draft`, `pending` |
+| | `pending` | `draft`, `pending` |
+| | `returned` | `returned`, `pending` |
+| | anything else | locked (400) |
+
+Approval-side changes (submit, approve, reject, return) keep their existing
+checks. Per the decisions above, admins may approve their own entries and one
+person may approve several levels.
+
+### Changes
+
+- `create-builder` only accepts `CREATE_STATUSES`.
+- `update-builder` checks the change with `canEditTo(current, next)`, uses the
+  entry id from the URL, and validates and saves answers against the entry's
+  stored `form_id`. The client already sends matching values, so no client
+  change was needed.
+- Every button on the create and edit entry pages maps to an allowed change
+  (save draft, submit, save a returned entry, resubmit).
+
+### Plan change
+
+The plan included converting the manual transactions to managed ones. That's
+dropped from this phase: Phase 1's `finally` rollback already fixes the actual
+connection leak, and the conversion would rewrite large blocks with no change in
+behavior. It fits better with the Phase 6 controller split.
+
+### Tests
+
+`tests/workflow.test.js`:
+
+- Every (current status → requested status) pair for `update-builder` (100
+  cases), allowed exactly when the table says so.
+- Create refuses every status except `draft`/`pending`, admins included.
+- Answers on a completed entry can't be rewritten.
+- The URL entry id wins over the body; questions from another form are refused.
+- End to end: create → submit → approve ×3 → completed, and return → edit →
+  resubmit → approve.
+
+Before the fix, the new tests showed `draft → completed` succeeding. Result:
+**532 tests passing**.
 
 ## Phase 3 — Object-level access *(planned)*
 
@@ -272,6 +336,8 @@ the new role. Covered by `tests/sessions.test.js`; **416 tests passing**.
 - Split the large controllers (`formEntriesController.js` ~1,400 lines,
   `reportController.js` ~840) into services; shared pagination and response
   helpers.
+- Convert manual transactions to managed ones
+  (`sequelize.transaction(async (t) => …)`), moved here from Phase 2.
 - Leads into the feature refactor.
 
 ---
