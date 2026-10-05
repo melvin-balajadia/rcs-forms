@@ -8,7 +8,8 @@ what changed, why, and how it was verified. Updated at the end of every phase.
   infrastructure are out of scope for now (see [Deferred](#deferred)).
 - **Branching:** one branch per phase, each created from the previous phase's
   branch. Branches are **not merged yet**; when merging is allowed, merge them
-  in order (Phase 0 → 1 → 2 …).
+  in order (Phase 0 → 1 → 2 …). **Step-by-step merge and deploy instructions:
+  [merge-guide.md](merge-guide.md).**
 - **Started:** 2026-10-01
 
 ## Status
@@ -25,8 +26,9 @@ what changed, why, and how it was verified. Updated at the end of every phase.
 
 ## Pending operations
 
-> **After Phase 0 is deployed**, for each environment and site database
-> (Marilao and Taytay, test and prod):
+> **After Phase 4 is deployed** (or right after Phase 0, if Phase 4 will follow
+> days later), for each environment and site database (Marilao and Taytay,
+> test and prod). Full steps: [merge-guide.md](merge-guide.md), Step 2.
 >
 > 1. **Required:** `UPDATE users SET user_refreshtoken = NULL;` — refresh tokens
 >    could be read through the API before Phase 0, so treat old ones as leaked.

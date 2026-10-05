@@ -4,6 +4,7 @@ import PageHeader from "@/components/page-header";
 import { LuLayoutDashboard } from "react-icons/lu";
 import { useNavigate } from "react-router-dom";
 import { SkeletonDashboard } from "@/components/skeleton-dashboard";
+import AnalyticsSection from "./analytics/AnalyticsSection";
 
 type RecentEntry = {
   id: number;
@@ -275,6 +276,9 @@ export default function Dashboard() {
           </div>
         ))}
       </div>
+
+      {/* ANALYTICS: filter bar + interactive charts */}
+      <AnalyticsSection />
 
       {/* RECENT ENTRIES TABLE */}
       <div className="bg-white rounded-lg border border-gray-100 shadow-sm p-6 mt-4">
