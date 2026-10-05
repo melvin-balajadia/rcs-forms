@@ -8,7 +8,6 @@ import FormSection from "../Models/FormSection.js";
 export const saveReport = async (req, res) => {
   try {
     const {
-      user_id,
       report_name,
       report_description,
       form_id,
@@ -21,6 +20,7 @@ export const saveReport = async (req, res) => {
       chart_type,
       chart_condition,
       chart_section_id,
+      compare_area,
       snapshot_overall_average,
       snapshot_yes_total,
       snapshot_no_total,
@@ -45,7 +45,7 @@ export const saveReport = async (req, res) => {
 
     // Create saved report
     const savedReport = await SavedReport.create({
-      created_by: user_id,
+      created_by: req.user.id, // never a body-supplied id
       report_name,
       report_description: report_description || null,
       form_id,
@@ -58,6 +58,7 @@ export const saveReport = async (req, res) => {
       chart_type,
       chart_condition,
       chart_section_id: chart_section_id || null,
+      compare_area: compare_area || false,
       snapshot_overall_average: snapshot_overall_average || null,
       snapshot_yes_total: snapshot_yes_total || null,
       snapshot_no_total: snapshot_no_total || null,
@@ -73,6 +74,7 @@ export const saveReport = async (req, res) => {
         section_id: item.section_id || null,
         question_id: item.question_id || null,
         section_name: item.section_name || null,
+        area_label: item.area_label || null,
         question_text: item.question_text || null,
         total_questions: item.total_questions || null,
         total_answers: item.total_answers,
@@ -135,6 +137,7 @@ export const getMySavedReports = async (req, res) => {
         "entries_count",
         "chart_type",
         "chart_condition",
+        "compare_area",
         "snapshot_overall_average",
         "createdAt",
         "last_viewed_at",
@@ -218,7 +221,8 @@ export const getSavedReportById = async (req, res) => {
 export const updateSavedReport = async (req, res) => {
   try {
     const { reportId } = req.params;
-    const { userId } = req;
+    // Only the creator may edit or refresh their report
+    const userId = req.user.id;
     const { report_name, report_description } = req.body;
 
     const report = await SavedReport.findOne({
@@ -261,18 +265,19 @@ export const updateSavedReport = async (req, res) => {
 export const deleteSavedReport = async (req, res) => {
   try {
     const { reportId } = req.params;
-    const { userId } = req;
 
+    // Saved reports are shared between admins, and any admin may archive one
+    // (the route is admin-only)
     const report = await SavedReport.findOne({
       where: {
         id: reportId,
-        created_by: userId,
+        is_archived: false,
       },
     });
 
     if (!report) {
       return res.status(404).json({
-        message: "Report not found or you don't have permission to delete it",
+        message: "Report not found",
       });
     }
 
@@ -300,7 +305,8 @@ export const deleteSavedReport = async (req, res) => {
 export const refreshSavedReport = async (req, res) => {
   try {
     const { reportId } = req.params;
-    const { userId } = req;
+    // Only the creator may edit or refresh their report
+    const userId = req.user.id;
 
     const report = await SavedReport.findOne({
       where: {
@@ -327,6 +333,7 @@ export const refreshSavedReport = async (req, res) => {
         chart_type: report.chart_type,
         chart_condition: report.chart_condition,
         chart_section_id: report.chart_section_id,
+        compare_area: report.compare_area,
         entry_ids: report.entry_ids,
       },
     });

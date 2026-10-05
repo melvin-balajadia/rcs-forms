@@ -5,6 +5,7 @@ import PageTable from "@/components/comp-485";
 import { LuNotepadText } from "react-icons/lu";
 import { Checkbox } from "@/components/ui/checkbox";
 import ActionButton from "@/components/action-button";
+import { useArchive, useCanArchive } from "@/services/useArchive";
 import { useFetch } from "@/services/useCrud";
 import type { ColumnDef, FilterFn } from "@tanstack/react-table";
 
@@ -39,6 +40,9 @@ const multiColumnFilterFn: FilterFn<Form> = (row, _columnId, filterValue) => {
 
 export default function Forms() {
   const navigate = useNavigate();
+  // Archive (qfd_admin / all_access only): row menu and bulk "Archive selected"
+  const canArchive = useCanArchive();
+  const archive = useArchive("form");
   const [pageIndex, setPageIndex] = useState(0);
   const [pageSize, setPageSize] = useState(10);
 
@@ -82,13 +86,20 @@ export default function Forms() {
     {
       id: "actions",
       header: () => <span className="sr-only">Actions</span>,
-      cell: ({ row }) => <ActionButton row={row} basePath="/forms" />,
+      cell: ({ row }) => (
+        <ActionButton
+          row={row}
+          basePath="/forms"
+          archive={
+            canArchive
+              ? { name: row.original.form_name, onConfirm: () => archive([row.original.id]) }
+              : undefined
+          }
+        />
+      ),
       enableHiding: false,
     },
   ];
-
-  if (isLoading) return <p>Loading forms...</p>;
-  if (isError) return <p>Error fetching forms!</p>;
 
   // ✅ Map API forms -> table rows
   const mappedForms: Form[] =
@@ -109,19 +120,33 @@ export default function Forms() {
       />
 
       <div className="bg-white shadow-md p-4 rounded mt-1">
-        <PageTable<Form>
-          data={mappedForms}
-          columns={columns}
-          manualPagination
-          totalItems={data?.total ?? 0}
-          pageIndex={pageIndex}
-          pageSize={pageSize}
-          onPageChange={(newPage) => setPageIndex(newPage)}
-          onPageSizeChange={(newSize) => {
-            setPageSize(newSize);
-            setPageIndex(0);
-          }}
-        />
+        {isLoading ? (
+          <div className="flex items-center justify-center py-12">
+            <div className="w-6 h-6 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+          </div>
+        ) : isError ? (
+          <p className="text-center text-red-500 py-12">
+            Error fetching forms!
+          </p>
+        ) : (
+          <PageTable<Form>
+            onArchiveSelected={
+              canArchive ? (rows) => archive(rows.map((r) => r.id)) : undefined
+            }
+            itemNoun={{ one: "form", many: "forms" }}
+            data={mappedForms}
+            columns={columns}
+            manualPagination
+            totalItems={data?.total ?? 0}
+            pageIndex={pageIndex}
+            pageSize={pageSize}
+            onPageChange={(newPage) => setPageIndex(newPage)}
+            onPageSizeChange={(newSize) => {
+              setPageSize(newSize);
+              setPageIndex(0);
+            }}
+          />
+        )}
       </div>
     </div>
   );

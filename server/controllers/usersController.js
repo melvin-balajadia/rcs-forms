@@ -1,6 +1,19 @@
 import Users from "../Models/Users.js";
 import bcrypt from "bcrypt";
 import { Op } from "sequelize";
+import { rolesFingerprint } from "../utilities/session.js";
+import {
+  isStrongPassword,
+  PASSWORD_RULE_MESSAGE,
+} from "../utilities/passwordPolicy.js";
+import { getPagination } from "../utilities/pagination.js";
+import { roleListError } from "../utilities/userRoles.js";
+import FormApprovers from "../Models/FormApprovers.js";
+import sequelize from "../utilities/db.js";
+
+// Archived users are hidden: lookups by id treat them as not found
+const findActiveUser = (id) =>
+  Users.findOne({ where: { id, user_archivestatus: false } });
 
 export const createUser = async (req, res) => {
   try {
@@ -25,60 +38,16 @@ export const createUser = async (req, res) => {
       });
     }
 
-    if (
-      !user_groups ||
-      !Array.isArray(user_groups) ||
-      user_groups.length === 0
-    ) {
+    if (!isStrongPassword(user_password)) {
       return res.status(400).json({
-        ErrorMessage: "User must have at least one role!",
+        ErrorMessage: PASSWORD_RULE_MESSAGE,
         ErrorState: true,
       });
     }
 
-    const validRoles = ["requestor", "approver", "all_access", "qfd_admin"];
-
-    const invalidRoles = user_groups.filter(
-      (role) => !validRoles.includes(role),
-    );
-    if (invalidRoles.length > 0) {
-      return res.status(400).json({
-        ErrorMessage: `Invalid roles: ${invalidRoles.join(", ")}. Valid roles are: ${validRoles.join(", ")}`,
-        ErrorState: true,
-      });
-    }
-
-    const hasRequestor = user_groups.includes("requestor");
-    const hasApprover = user_groups.includes("approver");
-    const hasAllAccess = user_groups.includes("all_access");
-    const hasQfdAdmin = user_groups.includes("qfd_admin");
-
-    if (hasAllAccess && user_groups.length > 1) {
-      return res.status(400).json({
-        ErrorMessage: "all_access cannot be combined with other roles.",
-        ErrorState: true,
-      });
-    }
-
-    if (hasQfdAdmin && user_groups.length > 1) {
-      return res.status(400).json({
-        ErrorMessage: "qfd_admin cannot be combined with other roles.",
-        ErrorState: true,
-      });
-    }
-
-    if (hasRequestor && hasApprover) {
-      return res.status(400).json({
-        ErrorMessage: "A requestor cannot also be an approver.",
-        ErrorState: true,
-      });
-    }
-
-    if (hasRequestor && user_groups.length > 1) {
-      return res.status(400).json({
-        ErrorMessage: "Requestor must be a single role.",
-        ErrorState: true,
-      });
+    const roleError = roleListError(user_groups, { listValidRoles: true });
+    if (roleError) {
+      return res.status(400).json({ ErrorMessage: roleError, ErrorState: true });
     }
 
     const existingUser = await Users.findOne({ where: { user_username } });
@@ -137,7 +106,7 @@ export const editUser = async (req, res) => {
       user_password,
     } = req.body;
 
-    const user = await Users.findByPk(id);
+    const user = await findActiveUser(id);
     if (!user) {
       return res.status(404).json({
         ErrorMessage: "User not found.",
@@ -145,57 +114,11 @@ export const editUser = async (req, res) => {
       });
     }
 
+    // Roles are optional on edit; when sent they must be a valid combination
     if (user_groups) {
-      if (!Array.isArray(user_groups) || user_groups.length === 0) {
-        return res.status(400).json({
-          ErrorMessage: "User must have at least one role!",
-          ErrorState: true,
-        });
-      }
-
-      const validRoles = ["requestor", "approver", "all_access", "qfd_admin"];
-
-      const invalidRoles = user_groups.filter(
-        (role) => !validRoles.includes(role),
-      );
-      if (invalidRoles.length > 0) {
-        return res.status(400).json({
-          ErrorMessage: `Invalid roles: ${invalidRoles.join(", ")}`,
-          ErrorState: true,
-        });
-      }
-
-      const hasRequestor = user_groups.includes("requestor");
-      const hasApprover = user_groups.includes("approver");
-      const hasAllAccess = user_groups.includes("all_access");
-      const hasQfdAdmin = user_groups.includes("qfd_admin");
-
-      if (hasAllAccess && user_groups.length > 1) {
-        return res.status(400).json({
-          ErrorMessage: "all_access cannot be combined with other roles.",
-          ErrorState: true,
-        });
-      }
-
-      if (hasQfdAdmin && user_groups.length > 1) {
-        return res.status(400).json({
-          ErrorMessage: "qfd_admin cannot be combined with other roles.",
-          ErrorState: true,
-        });
-      }
-
-      if (hasRequestor && hasApprover) {
-        return res.status(400).json({
-          ErrorMessage: "A requestor cannot also be an approver.",
-          ErrorState: true,
-        });
-      }
-
-      if (hasRequestor && user_groups.length > 1) {
-        return res.status(400).json({
-          ErrorMessage: "Requestor must be a single role.",
-          ErrorState: true,
-        });
+      const roleError = roleListError(user_groups);
+      if (roleError) {
+        return res.status(400).json({ ErrorMessage: roleError, ErrorState: true });
       }
     }
 
@@ -224,10 +147,26 @@ export const editUser = async (req, res) => {
       user_username,
     };
 
+    // A role change ends the user's sessions so they log in again with the
+    // new roles (verifyJWT also rejects their current access token)
+    if (
+      user_groups &&
+      rolesFingerprint({ user_groups }) !== rolesFingerprint(user)
+    ) {
+      updateData.user_refreshtoken = null;
+    }
+
     if (user_password && user_password.trim() !== "") {
+      if (!isStrongPassword(user_password)) {
+        return res.status(400).json({
+          ErrorMessage: PASSWORD_RULE_MESSAGE,
+          ErrorState: true,
+        });
+      }
       const salt = await bcrypt.genSalt(10);
       updateData.user_password = await bcrypt.hash(user_password, salt);
       updateData.user_reset_token = false;
+      updateData.user_refreshtoken = null; // end existing sessions
     }
 
     await user.update(updateData);
@@ -258,16 +197,14 @@ export const resetUserPassword = async (req, res) => {
       });
     }
 
-    const passwordRegex = /^(?=.*[A-Z])(?=.*[0-9])(?=.*[^a-zA-Z0-9]).{8,}$/;
-    if (!passwordRegex.test(password)) {
+    if (!isStrongPassword(password)) {
       return res.status(400).json({
-        ErrorMessage:
-          "Password must be at least 8 characters and include an uppercase letter, a number, and a special character.",
+        ErrorMessage: PASSWORD_RULE_MESSAGE,
         ErrorState: true,
       });
     }
 
-    const user = await Users.findByPk(id);
+    const user = await findActiveUser(id);
     if (!user) {
       return res.status(404).json({
         ErrorMessage: "User not found.",
@@ -281,6 +218,7 @@ export const resetUserPassword = async (req, res) => {
     await user.update({
       user_password: hashedPassword,
       user_reset_token: false,
+      user_refreshtoken: null, // end existing sessions
     });
 
     return res.status(200).json({
@@ -301,7 +239,7 @@ export const getUserById = async (req, res) => {
   try {
     const { id } = req.params;
 
-    const user = await Users.findByPk(id);
+    const user = await findActiveUser(id);
 
     if (!user) {
       return res.status(404).json({
@@ -328,9 +266,7 @@ export const getUserById = async (req, res) => {
 export const usersPagination = async (req, res) => {
   try {
     // Pagination Params
-    const page = parseInt(req.query.page) || 1;
-    const pageSize = parseInt(req.query.pageSize) || 10;
-    const offset = (page - 1) * pageSize;
+    const { page, pageSize, offset } = getPagination(req.query, { maxPageSize: 1000 });
 
     // Filter Params
     const {
@@ -341,7 +277,7 @@ export const usersPagination = async (req, res) => {
       user_department,
       user_site,
     } = req.query;
-    const whereCondition = {};
+    const whereCondition = { user_archivestatus: false }; // archived users are hidden
 
     if (user_id) {
       whereCondition.user_id = user_id;
@@ -397,5 +333,53 @@ export const usersPagination = async (req, res) => {
     });
   } catch (error) {
     res.status(500).json({ message: "Error fetching paginated users", error });
+  }
+};
+
+// Archive a user (all_access only): they can no longer log in, their sessions
+// end, and their approver assignments are deactivated so they stop appearing
+// as an approver. Other approvers at the same level, and admins, can still
+// approve anything waiting. Nothing is deleted.
+export const archiveUser = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    if (String(req.user.id) === String(id)) {
+      return res.status(400).json({
+        ErrorMessage: "You can't archive your own account.",
+        ErrorState: true,
+      });
+    }
+
+    const user = await findActiveUser(id);
+    if (!user) {
+      return res.status(404).json({
+        ErrorMessage: "User not found.",
+        ErrorState: true,
+      });
+    }
+
+    await sequelize.transaction(async (transaction) => {
+      await user.update(
+        { user_archivestatus: true, user_refreshtoken: null },
+        { transaction },
+      );
+      await FormApprovers.update(
+        { is_active: false },
+        { where: { user_id: user.id }, transaction },
+      );
+    });
+
+    return res.status(200).json({
+      ErrorMessage: "User has been archived.",
+      ErrorState: false,
+    });
+  } catch (err) {
+    console.error("Backend error:", err);
+    return res.status(500).json({
+      ErrorMessage:
+        "Unable to process your request. Contact your administrator.",
+      ErrorState: true,
+    });
   }
 };

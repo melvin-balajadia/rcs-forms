@@ -7,6 +7,7 @@ import PageHeader from "@/components/page-header";
 import PageTable from "@/components/comp-485";
 import { Checkbox } from "@/components/ui/checkbox";
 import ActionButton from "@/components/action-button";
+import { useArchive, useCanArchive } from "@/services/useArchive";
 import { apiGet } from "@/services/api"; // ✅ use apiGet (with interceptors)
 
 type Room = {
@@ -32,6 +33,9 @@ const multiColumnFilterFn: FilterFn<Room> = (row, _columnId, filterValue) => {
 
 export default function Rooms() {
   const navigate = useNavigate();
+  // Archive (qfd_admin / all_access only): row menu and bulk "Archive selected"
+  const canArchive = useCanArchive();
+  const archive = useArchive("room");
   const [pageIndex, setPageIndex] = useState(0);
   const [pageSize, setPageSize] = useState(10);
 
@@ -100,13 +104,20 @@ export default function Rooms() {
     {
       id: "actions",
       header: () => <span className="sr-only">Actions</span>,
-      cell: ({ row }) => <ActionButton row={row} basePath="/rooms" />,
+      cell: ({ row }) => (
+        <ActionButton
+          row={row}
+          basePath="/rooms"
+          archive={
+            canArchive
+              ? { name: row.original.room_name, onConfirm: () => archive([row.original.id]) }
+              : undefined
+          }
+        />
+      ),
       enableHiding: false,
     },
   ];
-
-  if (isLoading) return <p>Loading...</p>;
-  if (isError) return <p>Error fetching rooms!</p>;
 
   return (
     <div className="mx-6 mt-5">
@@ -119,19 +130,33 @@ export default function Rooms() {
       />
 
       <div className="bg-white shadow-md p-4 rounded mt-1">
-        <PageTable<Room>
-          data={data?.rooms ?? []}
-          columns={columns}
-          manualPagination
-          totalItems={data?.total ?? 0}
-          pageIndex={pageIndex}
-          pageSize={pageSize}
-          onPageChange={(newPage) => setPageIndex(newPage)}
-          onPageSizeChange={(newSize) => {
-            setPageSize(newSize);
-            setPageIndex(0);
-          }}
-        />
+        {isLoading ? (
+          <div className="flex items-center justify-center py-12">
+            <div className="w-6 h-6 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+          </div>
+        ) : isError ? (
+          <p className="text-center text-red-500 py-12">
+            Error fetching rooms!
+          </p>
+        ) : (
+          <PageTable<Room>
+            onArchiveSelected={
+              canArchive ? (rows) => archive(rows.map((r) => r.id)) : undefined
+            }
+            itemNoun={{ one: "room", many: "rooms" }}
+            data={data?.rooms ?? []}
+            columns={columns}
+            manualPagination
+            totalItems={data?.total ?? 0}
+            pageIndex={pageIndex}
+            pageSize={pageSize}
+            onPageChange={(newPage) => setPageIndex(newPage)}
+            onPageSizeChange={(newSize) => {
+              setPageSize(newSize);
+              setPageIndex(0);
+            }}
+          />
+        )}
       </div>
     </div>
   );

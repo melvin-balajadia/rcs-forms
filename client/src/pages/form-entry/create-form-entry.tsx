@@ -27,6 +27,7 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { getAuth } from "@/context/AuthContext";
+import { localDateString } from "@/lib/dates";
 
 type Form = {
   form_id?: number | string;
@@ -55,7 +56,7 @@ type Section = {
 
 export default function CreateFormEntry() {
   const navigate = useNavigate();
-  const today = new Date().toISOString().split("T")[0];
+  const today = localDateString(); // local date, not UTC
   const { user } = getAuth();
 
   useEffect(() => {

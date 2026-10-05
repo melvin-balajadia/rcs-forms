@@ -2,6 +2,8 @@ import { useNavigate, useParams } from "react-router-dom";
 import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import PageHeader from "@/components/page-header";
+import EntryLoadError from "./entry-load-state";
+import { retryUnlessDenied } from "@/lib/httpErrors";
 import TextField from "@/components/textfield";
 import Button from "@/components/button";
 import { LuFileText, LuCalendarX, LuEye } from "react-icons/lu";
@@ -166,10 +168,16 @@ export default function EditFormEntry() {
   }, [user, navigate, isRequestor, isApprover]);
 
   /* ===================== FETCH FORM ENTRY ===================== */
-  const { data: formEntry, isLoading } = useQuery<FormEntry>({
+  const {
+    data: formEntry,
+    isLoading,
+    error: entryError,
+    refetch: refetchEntry,
+  } = useQuery<FormEntry>({
     queryKey: ["form-entry", entryId],
     queryFn: async () => apiGet(`/form-entries/get/${entryId}`),
     enabled: !!entryId,
+    retry: retryUnlessDenied,
   });
 
   /* ===================== FETCH APPROVAL HISTORY ===================== */
@@ -751,7 +759,35 @@ export default function EditFormEntry() {
     );
   };
 
-  if (isLoading) return null;
+  if (isLoading) {
+    return (
+      <div className="mx-6 mt-5">
+        <PageHeader
+          icon={<LuFileText className="text-2xl text-font-main" />}
+          title={pageTitle}
+          buttonText="Go Back"
+          onButtonClick={() => navigate("/form-entry")}
+          variant="default"
+        />
+        <div className="bg-white shadow-md p-4 rounded mt-1">
+          <div className="flex items-center justify-center py-12">
+            <div className="w-6 h-6 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Not found, not allowed, or failed to load: say so instead of an empty form
+  if (!formEntry) {
+    return (
+      <EntryLoadError
+        title={pageTitle}
+        error={entryError}
+        onRetry={() => void refetchEntry()}
+      />
+    );
+  }
 
   return (
     <div className="mx-6 mt-5">

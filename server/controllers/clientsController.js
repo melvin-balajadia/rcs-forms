@@ -1,9 +1,12 @@
 import Clients from "../Models/Clients.js";
 import { Op } from "sequelize";
+import { getPagination } from "../utilities/pagination.js";
 
 export const getClients = async (req, res) => {
   try {
-    const clients = await Clients.findAll();
+    const clients = await Clients.findAll({
+      where: { clients_archivestatus: 0 }, // Only active clients
+    });
     res.status(200).json(clients);
   } catch (error) {
     res.status(500).json({ message: "Error fetching clients", error });
@@ -12,7 +15,9 @@ export const getClients = async (req, res) => {
 
 export const getClientsById = async (req, res) => {
   try {
-    const clients = await Clients.findByPk(req.params.id);
+    const clients = await Clients.findOne({
+      where: { clients_id: req.params.id, clients_archivestatus: 0 },
+    });
     if (!clients) return res.status(404).json({ message: "Client not found" });
 
     res.status(200).json(clients);
@@ -100,9 +105,7 @@ export const archiveClients = async (req, res) => {
 export const clientsPagination = async (req, res) => {
   try {
     // Pagination Params
-    const page = parseInt(req.query.page) || 1;
-    const pageSize = parseInt(req.query.pageSize) || 10;
-    const offset = (page - 1) * pageSize;
+    const { page, pageSize, offset } = getPagination(req.query);
 
     // Filter Params
     const { id, name, site, from, to } = req.query;

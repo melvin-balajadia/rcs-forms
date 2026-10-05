@@ -93,6 +93,12 @@ const Reports = sequelize.define(
       onUpdate: "CASCADE",
       onDelete: "SET NULL",
     },
+    compare_area: {
+      type: DataTypes.BOOLEAN,
+      allowNull: false,
+      defaultValue: false,
+      comment: "True when the Overall Summary chart is a Main vs Annex comparison",
+    },
 
     // Light Snapshot - Summary Statistics
     snapshot_overall_average: {

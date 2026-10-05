@@ -1,5 +1,6 @@
 import express from "express";
 import verifyJWT from "../middleware/verifyJWT.js";
+import requireRole, { ADMINS } from "../middleware/requireRole.js";
 
 import {
   createRooms,
@@ -9,14 +10,21 @@ import {
   archiveRooms,
   roomsPagination,
 } from "../controllers/roomsController.js";
+import { validate } from "../middleware/validate.js";
+import {
+  roomSchema,
+} from "../validation/schemas.js";
 
 const router = express.Router();
 
-router.post("/create", verifyJWT, createRooms);
-router.get("/all", verifyJWT, getRooms);
-router.get("/get/:id", verifyJWT, getRoomsById);
-router.put("/update/:id", verifyJWT, updateRooms);
-router.put("/archive/:id", verifyJWT, archiveRooms);
-router.get("/pagination", verifyJWT, roomsPagination);
+// Rooms page is admin-only
+router.use(verifyJWT, requireRole(...ADMINS));
+
+router.post("/create", validate(roomSchema), createRooms);
+router.get("/all", getRooms);
+router.get("/get/:id", getRoomsById);
+router.put("/update/:id", validate(roomSchema), updateRooms);
+router.put("/archive/:id", archiveRooms);
+router.get("/pagination", roomsPagination);
 
 export default router;

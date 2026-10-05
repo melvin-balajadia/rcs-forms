@@ -2,6 +2,8 @@ import { useNavigate, useParams } from "react-router-dom";
 import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import PageHeader from "@/components/page-header";
+import EntryLoadError from "./entry-load-state";
+import { retryUnlessDenied } from "@/lib/httpErrors";
 import TextField from "@/components/textfield";
 import Button from "@/components/button";
 import { LuFileText, LuCalendarX } from "react-icons/lu";
@@ -66,13 +68,19 @@ export default function ViewFormEntry() {
   const [answers, setAnswers] = useState<Record<string, QuestionValue>>({});
 
   // Fetch form entry details
-  const { data: formEntry, isLoading: isLoadingEntry } = useQuery<FormEntry>({
+  const {
+    data: formEntry,
+    isLoading: isLoadingEntry,
+    error: entryError,
+    refetch: refetchEntry,
+  } = useQuery<FormEntry>({
     queryKey: ["form-entry", entryId],
     queryFn: async () => {
       const res = await apiGet<any>(`/form-entries/get/${entryId}`);
       return res;
     },
     enabled: !!entryId,
+    retry: retryUnlessDenied,
   });
 
   // Fetch form structure
@@ -275,7 +283,9 @@ export default function ViewFormEntry() {
           variant="default"
         />
         <div className="bg-white shadow-md p-4 rounded mt-1">
-          <p className="text-center text-gray-500">Loading form entry...</p>
+          <div className="flex items-center justify-center py-12">
+            <div className="w-6 h-6 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+          </div>
         </div>
       </div>
     );
@@ -283,18 +293,11 @@ export default function ViewFormEntry() {
 
   if (!formEntry) {
     return (
-      <div className="mx-6">
-        <PageHeader
-          icon={<LuFileText className="text-2xl text-font-main" />}
-          title="View Form Entry"
-          buttonText="Go Back"
-          onButtonClick={() => navigate("/form-entry")}
-          variant="default"
-        />
-        <div className="bg-white shadow-md p-4 rounded mt-1">
-          <p className="text-center text-red-500">Form entry not found</p>
-        </div>
-      </div>
+      <EntryLoadError
+        title="View Form Entry"
+        error={entryError}
+        onRetry={() => void refetchEntry()}
+      />
     );
   }
 

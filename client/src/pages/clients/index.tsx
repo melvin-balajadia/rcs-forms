@@ -7,6 +7,7 @@ import PageHeader from "@/components/page-header";
 import PageTable from "@/components/comp-485";
 import { Checkbox } from "@/components/ui/checkbox";
 import ActionButton from "@/components/action-button";
+import { useArchive, useCanArchive } from "@/services/useArchive";
 import { apiGet } from "@/services/api";
 
 type Client = {
@@ -31,6 +32,9 @@ const multiColumnFilterFn: FilterFn<Client> = (row, _columnId, filterValue) => {
 
 export default function Clients() {
   const navigate = useNavigate();
+  // Archive (qfd_admin / all_access only): row menu and bulk "Archive selected"
+  const canArchive = useCanArchive();
+  const archive = useArchive("client");
   const [pageIndex, setPageIndex] = useState(0);
   const [pageSize, setPageSize] = useState(10);
 
@@ -93,13 +97,20 @@ export default function Clients() {
     {
       id: "actions",
       header: () => <span className="sr-only">Actions</span>,
-      cell: ({ row }) => <ActionButton row={row} basePath="/clients" />,
+      cell: ({ row }) => (
+        <ActionButton
+          row={row}
+          basePath="/clients"
+          archive={
+            canArchive
+              ? { name: row.original.clients_name, onConfirm: () => archive([row.original.id]) }
+              : undefined
+          }
+        />
+      ),
       enableHiding: false,
     },
   ];
-
-  if (isLoading) return <p>Loading clients...</p>;
-  if (isError) return <p>Error fetching clients!</p>;
 
   return (
     <div className="mx-6 mt-5">
@@ -112,19 +123,33 @@ export default function Clients() {
       />
 
       <div className="bg-white shadow-md p-4 rounded mt-1">
-        <PageTable<Client>
-          data={data?.clients ?? []}
-          columns={columns}
-          manualPagination
-          totalItems={data?.total ?? 0}
-          pageIndex={pageIndex}
-          pageSize={pageSize}
-          onPageChange={(newPage) => setPageIndex(newPage)}
-          onPageSizeChange={(newSize) => {
-            setPageSize(newSize);
-            setPageIndex(0);
-          }}
-        />
+        {isLoading ? (
+          <div className="flex items-center justify-center py-12">
+            <div className="w-6 h-6 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+          </div>
+        ) : isError ? (
+          <p className="text-center text-red-500 py-12">
+            Error fetching clients!
+          </p>
+        ) : (
+          <PageTable<Client>
+            onArchiveSelected={
+              canArchive ? (rows) => archive(rows.map((r) => r.id)) : undefined
+            }
+            itemNoun={{ one: "client", many: "clients" }}
+            data={data?.clients ?? []}
+            columns={columns}
+            manualPagination
+            totalItems={data?.total ?? 0}
+            pageIndex={pageIndex}
+            pageSize={pageSize}
+            onPageChange={(newPage) => setPageIndex(newPage)}
+            onPageSizeChange={(newSize) => {
+              setPageSize(newSize);
+              setPageIndex(0);
+            }}
+          />
+        )}
       </div>
     </div>
   );

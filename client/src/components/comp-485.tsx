@@ -26,7 +26,7 @@ import {
   CircleXIcon,
   Columns3Icon,
   ListFilterIcon,
-  TrashIcon,
+  ArchiveIcon,
 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
@@ -84,6 +84,12 @@ type Props<T extends WithId> = {
   onPageChange?: (newPage: number) => void;
   onPageSizeChange?: (newSize: number) => void;
   toolbarExtra?: ReactNode;
+  // When given, selected rows can be archived together (with a confirmation).
+  // Pages pass it only to users allowed to archive, and only where archiving
+  // exists; without it there is no bulk action.
+  onArchiveSelected?: (rows: T[]) => Promise<unknown>;
+  // e.g. { one: "entry", many: "entries" } for the confirmation text
+  itemNoun?: { one: string; many: string };
 };
 
 export default function PageTable<T extends WithId>({
@@ -96,6 +102,8 @@ export default function PageTable<T extends WithId>({
   onPageChange,
   onPageSizeChange,
   toolbarExtra,
+  onArchiveSelected,
+  itemNoun = { one: "row", many: "rows" },
 }: Props<T>) {
   const id = useId();
   const inputRef = useRef<HTMLInputElement>(null);
@@ -140,12 +148,14 @@ export default function PageTable<T extends WithId>({
       : undefined,
   });
 
-  const handleDeleteRows = () => {
-    const selectedRows = table.getSelectedRowModel().rows;
-    const updatedData = data.filter(
-      (item) => !selectedRows.some((row) => row.original.id === item.id),
-    );
-    setData(updatedData);
+  // Bulk archive: the page archives the records on the server and refreshes
+  // its data; the table only clears the selection
+  const selectedCount = table.getSelectedRowModel().rows.length;
+  const selectedNoun = selectedCount === 1 ? itemNoun.one : itemNoun.many;
+  const handleArchiveSelected = async () => {
+    if (!onArchiveSelected) return;
+    const rows = table.getSelectedRowModel().rows.map((row) => row.original);
+    await onArchiveSelected(rows);
     table.resetRowSelection();
   };
 
@@ -153,8 +163,9 @@ export default function PageTable<T extends WithId>({
     <div className="space-y-4">
       {/* Top bar */}
       <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
-        {/* Left: Search + View toggle */}
-        <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center sm:gap-3">
+        {/* Left: Search + View toggle + page filters. Wraps onto more lines
+            when they don't fit, instead of running past the card's edge. */}
+        <div className="flex w-full min-w-0 flex-col gap-2 sm:flex-1 sm:flex-row sm:flex-wrap sm:items-center sm:gap-3">
           <div className="relative w-full sm:w-auto">
             <Input
               id={`${id}-input`}
@@ -223,16 +234,16 @@ export default function PageTable<T extends WithId>({
           {toolbarExtra}
         </div>
 
-        {/* Right: Delete button */}
-        {table.getSelectedRowModel().rows.length > 0 && (
+        {/* Right: bulk archive (only where the page allows it) */}
+        {onArchiveSelected && selectedCount > 0 && (
           <div className="flex w-full justify-end sm:w-auto">
             <AlertDialog>
               <AlertDialogTrigger asChild>
                 <Button className="w-full sm:w-auto" variant="outline">
-                  <TrashIcon className="-ms-1 opacity-60" size={16} />
-                  Delete
+                  <ArchiveIcon className="-ms-1 opacity-60" size={16} />
+                  Archive selected
                   <span className="bg-background text-muted-foreground/70 -me-1 inline-flex h-5 items-center rounded border px-1 text-[0.625rem] font-medium">
-                    {table.getSelectedRowModel().rows.length}
+                    {selectedCount}
                   </span>
                 </Button>
               </AlertDialogTrigger>
@@ -243,15 +254,11 @@ export default function PageTable<T extends WithId>({
                   </div>
                   <AlertDialogHeader>
                     <AlertDialogTitle>
-                      Are you absolutely sure?
+                      Archive {selectedCount} {selectedNoun}?
                     </AlertDialogTitle>
                     <AlertDialogDescription>
-                      This action cannot be undone. This will permanently delete{" "}
-                      {table.getSelectedRowModel().rows.length} selected{" "}
-                      {table.getSelectedRowModel().rows.length === 1
-                        ? "row"
-                        : "rows"}
-                      .
+                      They will be hidden from lists, reports and the dashboard.
+                      Nothing is deleted.
                     </AlertDialogDescription>
                   </AlertDialogHeader>
                 </div>
@@ -260,10 +267,12 @@ export default function PageTable<T extends WithId>({
                     Cancel
                   </AlertDialogCancel>
                   <AlertDialogAction
-                    onClick={handleDeleteRows}
+                    onClick={() => {
+                      void handleArchiveSelected();
+                    }}
                     className="w-full sm:w-auto"
                   >
-                    Delete
+                    Archive
                   </AlertDialogAction>
                 </AlertDialogFooter>
               </AlertDialogContent>

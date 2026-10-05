@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import type { ColumnDef, FilterFn } from "@tanstack/react-table";
 import { LuNotebookPen } from "react-icons/lu";
 import PageHeader from "@/components/page-header";
@@ -13,8 +13,10 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import ActionButton from "@/components/action-button";
+import { useArchive, useCanArchive } from "@/services/useArchive";
 import { apiGet } from "@/services/api";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
+import { AWAITING_ANY_LEVEL } from "@/lib/entryStatuses";
 
 type FormEntry = {
   id: string;
@@ -109,6 +111,8 @@ const STATUS_FILTER_OPTIONS = [
   { label: "Draft", value: "draft" },
   { label: "Pending Submission", value: "pending" },
   { label: "Returned for Correction", value: "returned" },
+  // Used by the dashboard's "Waiting for your approval" link
+  { label: "Awaiting Approval (any level)", value: AWAITING_ANY_LEVEL },
   { label: "Awaiting 1st Approval", value: "submitted_first" },
   { label: "Awaiting 2nd Approval", value: "approved_first,submitted_second" },
   { label: "Awaiting 3rd Approval", value: "approved_second,submitted_third" },
@@ -116,19 +120,105 @@ const STATUS_FILTER_OPTIONS = [
   { label: "Rejected", value: "rejected" },
 ];
 
+// Filters live in the URL (e.g. /form-entry?form_id=3&status=completed), so a
+// filtered list survives a refresh, can be shared, and can be opened from
+// other pages such as the dashboard. These are the ones the API accepts.
+const URL_FILTERS = [
+  "form_id",
+  "status",
+  "site",
+  "area",
+  "from",
+  "to",
+  "completed_from",
+  "completed_to",
+  "returned_from",
+  "returned_to",
+] as const;
+// Set only by links from other pages; shown as chips with a "Clear" action
+const LINKED_FILTER_LABELS: Record<string, string> = {
+  site: "Site",
+  area: "Area",
+};
+// Date ranges set by links (the dashboard's charts), also shown as chips
+const LINKED_DATE_RANGES = [
+  { label: "Date", from: "from", to: "to" },
+  { label: "Completed on", from: "completed_from", to: "completed_to" },
+  { label: "Returned on", from: "returned_from", to: "returned_to" },
+] as const;
+
+type FormOption = { id: number; form_name: string };
+
 export default function FormEntries() {
   const navigate = useNavigate();
+  // Archive (qfd_admin / all_access only): row menu and bulk "Archive selected"
+  const canArchive = useCanArchive();
+  const archive = useArchive("formEntry");
+  const [searchParams, setSearchParams] = useSearchParams();
   const [pageIndex, setPageIndex] = useState(0);
   const [pageSize, setPageSize] = useState(10);
-  const [statusFilter, setStatusFilter] = useState("all");
 
-  const { data, isLoading, isError } = useQuery<APIResponse>({
-    queryKey: ["formEntries", pageIndex, pageSize, statusFilter],
+  const statusFilter = searchParams.get("status") || "all";
+  const formFilter = searchParams.get("form_id") || "all";
+  const linkedFilters = Object.keys(LINKED_FILTER_LABELS)
+    .map((key) => ({ key, value: searchParams.get(key) }))
+    .filter((f): f is { key: string; value: string } => Boolean(f.value));
+  const linkedRanges = LINKED_DATE_RANGES.map((r) => ({
+    label: r.label,
+    from: searchParams.get(r.from),
+    to: searchParams.get(r.to),
+  })).filter((r) => r.from || r.to);
+
+  // One filter changed: update the URL (no new history entry) and go to page 1
+  const setFilter = (key: string, value: string | null) => {
+    const next = new URLSearchParams(searchParams);
+    if (!value || value === "all") next.delete(key);
+    else next.set(key, value);
+    setSearchParams(next, { replace: true });
+    setPageIndex(0);
+  };
+
+  const clearLinkedFilters = () => {
+    const next = new URLSearchParams(searchParams);
+    for (const key of [
+      ...Object.keys(LINKED_FILTER_LABELS),
+      ...LINKED_DATE_RANGES.flatMap((r) => [r.from, r.to]),
+    ])
+      next.delete(key);
+    setSearchParams(next, { replace: true });
+    setPageIndex(0);
+  };
+
+  // Active forms for the "Filter by form" dropdown
+  const { data: forms = [] } = useQuery<FormOption[]>({
+    queryKey: ["forms", "active"],
     queryFn: async () => {
-      const statusParam =
-        statusFilter !== "all" ? `&status=${encodeURIComponent(statusFilter)}` : "";
+      const res = await apiGet<FormOption[]>("/forms/all");
+      return [...res].sort((a, b) => a.form_name.localeCompare(b.form_name));
+    },
+  });
+  // A form opened from a link may be archived (not in the active list)
+  const formOptions =
+    formFilter !== "all" && !forms.some((f) => String(f.id) === formFilter)
+      ? [...forms, { id: Number(formFilter), form_name: `Form #${formFilter}` }]
+      : forms;
+
+  const selectedFormName =
+    formOptions.find((f) => String(f.id) === formFilter)?.form_name ??
+    "All Forms";
+
+  const filterQuery = URL_FILTERS.map((key) => [key, searchParams.get(key)])
+    .filter(([, value]) => value)
+    .map(([key, value]) => `&${key}=${encodeURIComponent(value as string)}`)
+    .join("");
+
+  const { data, isLoading, isError, isFetching } = useQuery<APIResponse>({
+    queryKey: ["formEntries", pageIndex, pageSize, filterQuery],
+    // Keep showing the current rows while the next filter's rows load
+    placeholderData: keepPreviousData,
+    queryFn: async () => {
       const res = await apiGet<APIResponse>(
-        `/form-entries/pagination?page=${pageIndex + 1}&pageSize=${pageSize}${statusParam}`,
+        `/form-entries/pagination?page=${pageIndex + 1}&pageSize=${pageSize}${filterQuery}`,
       );
       return {
         ...res,
@@ -212,13 +302,20 @@ export default function FormEntries() {
     {
       id: "actions",
       header: "Actions", // ✅ Changed from sr-only to visible header
-      cell: ({ row }) => <ActionButton row={row} basePath="/form-entry" />,
+      cell: ({ row }) => (
+        <ActionButton
+          row={row}
+          basePath="/form-entry"
+          archive={
+            canArchive
+              ? { name: `Entry #${row.original.id}`, onConfirm: () => archive([row.original.id]) }
+              : undefined
+          }
+        />
+      ),
       enableHiding: false,
     },
   ];
-
-  if (isLoading) return <p>Loading...</p>;
-  if (isError) return <p>Error fetching form entries!</p>;
 
   return (
     <div className="mx-6 mt-5">
@@ -231,39 +328,116 @@ export default function FormEntries() {
       />
 
       <div className="bg-white shadow-md p-4 rounded mt-1">
-        <PageTable<FormEntry>
-          data={data?.entries ?? []}
-          columns={columns}
-          manualPagination
-          totalItems={data?.total ?? 0}
-          pageIndex={pageIndex}
-          pageSize={pageSize}
-          toolbarExtra={
-            <Select
-              value={statusFilter}
-              onValueChange={(value) => {
-                setStatusFilter(value);
+        {(linkedFilters.length > 0 || linkedRanges.length > 0) && (
+          <div className="mb-3 flex flex-wrap items-center gap-2 text-sm">
+            <span className="text-gray-500">Also filtered by:</span>
+            {linkedFilters.map((f) => (
+              <span
+                key={f.key}
+                className="rounded-full border border-gray-200 bg-gray-50 px-3 py-0.5 text-gray-700"
+              >
+                {LINKED_FILTER_LABELS[f.key]}: {f.value}
+              </span>
+            ))}
+            {linkedRanges.map((r) => (
+              <span
+                key={r.label}
+                className="rounded-full border border-gray-200 bg-gray-50 px-3 py-0.5 text-gray-700"
+              >
+                {r.label}:{" "}
+                {r.from === r.to ? r.from : `${r.from ?? "…"} – ${r.to ?? "…"}`}
+              </span>
+            ))}
+            <button
+              type="button"
+              onClick={clearLinkedFilters}
+              className="text-blue-600 hover:underline"
+            >
+              Clear
+            </button>
+          </div>
+        )}
+        {isLoading ? (
+          <div className="flex items-center justify-center py-12">
+            <div className="w-6 h-6 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+          </div>
+        ) : isError ? (
+          <p className="text-center text-red-500 py-12">
+            Error fetching form entries!
+          </p>
+        ) : (
+          <div
+            className={`transition-opacity ${isFetching ? "opacity-60" : ""}`}
+            aria-busy={isFetching}
+          >
+            <PageTable<FormEntry>
+              onArchiveSelected={
+                canArchive ? (rows) => archive(rows.map((r) => r.id)) : undefined
+              }
+              itemNoun={{ one: "entry", many: "entries" }}
+              data={data?.entries ?? []}
+              columns={columns}
+              manualPagination
+              totalItems={data?.total ?? 0}
+              pageIndex={pageIndex}
+              pageSize={pageSize}
+              toolbarExtra={
+                <>
+                  <Select
+                    value={formFilter}
+                    onValueChange={(value) => setFilter("form_id", value)}
+                  >
+                    <SelectTrigger
+                      // Long form names stay on one line with "…"; the full
+                      // name shows on hover. (The shared trigger lays the
+                      // value out as flex, where line-clamp has no effect.)
+                      className="w-full sm:w-[260px] *:data-[slot=select-value]:block *:data-[slot=select-value]:min-w-0 *:data-[slot=select-value]:truncate *:data-[slot=select-value]:text-left"
+                      title={selectedFormName}
+                      aria-label="Filter by form"
+                    >
+                      <SelectValue placeholder="Filter by form" />
+                    </SelectTrigger>
+                    <SelectContent className="max-w-[min(28rem,90vw)]">
+                      <SelectItem value="all">All Forms</SelectItem>
+                      {formOptions.map((form) => (
+                        <SelectItem
+                          key={form.id}
+                          value={String(form.id)}
+                          className="whitespace-normal"
+                        >
+                          {form.form_name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Select
+                    value={statusFilter}
+                    onValueChange={(value) => setFilter("status", value)}
+                  >
+                    <SelectTrigger
+                      className="w-full sm:w-[200px]"
+                      aria-label="Filter by status"
+                    >
+                      <SelectValue placeholder="Filter by status" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {STATUS_FILTER_OPTIONS.map((option) => (
+                        <SelectItem key={option.value} value={option.value}>
+                          {option.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </>
+              }
+              onPageChange={(newPage) => setPageIndex(newPage)}
+              onPageSizeChange={(newSize) => {
+                setPageSize(newSize);
                 setPageIndex(0);
               }}
-            >
-              <SelectTrigger className="w-full sm:w-[200px]">
-                <SelectValue placeholder="Filter by status" />
-              </SelectTrigger>
-              <SelectContent>
-                {STATUS_FILTER_OPTIONS.map((option) => (
-                  <SelectItem key={option.value} value={option.value}>
-                    {option.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          }
-          onPageChange={(newPage) => setPageIndex(newPage)}
-          onPageSizeChange={(newSize) => {
-            setPageSize(newSize);
-            setPageIndex(0);
-          }}
-        />
+            />
+          </div>
+        )}
       </div>
     </div>
   );
