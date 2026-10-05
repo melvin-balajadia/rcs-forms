@@ -6,7 +6,7 @@ import {
   getForms,
   getFormById,
   createForm,
-  deleteForm,
+  archiveForm,
   formsPagination,
   submitFormBuilder,
   updateFormBuilder,
@@ -23,6 +23,8 @@ router.get("/get/:id", getFormById);
 router.post("/create", requireRole(...ADMINS), createForm);
 router.post("/builder", requireRole(...ADMINS), submitFormBuilder);
 router.put("/update/:id", requireRole(...ADMINS), updateFormBuilder);
-router.delete("/:id", requireRole(...ADMINS), deleteForm);
+// Archive only — forms are never hard-deleted (DELETE kept as an alias)
+router.put("/archive/:id", requireRole(...ADMINS), archiveForm);
+router.delete("/:id", requireRole(...ADMINS), archiveForm);
 
 export default router;

@@ -1,6 +1,7 @@
 import { Op } from "sequelize";
 import Users from "../Models/Users.js";
 import FormApprovers from "../Models/FormApprovers.js";
+import FormEntries from "../Models/FormEntries.js";
 
 // Resolves the authenticated user (from verifyJWT's req.user_name) and
 // returns the FormEntries visibility scope for them:
@@ -49,4 +50,17 @@ export const getFormEntryVisibility = async (req) => {
     isAdmin: false,
     condition: { [Op.or]: visibilityConditions },
   };
+};
+
+// Loads one entry only if the caller may see it (same rules as the list).
+// Returns null otherwise, so callers answer 404 without revealing whether the
+// entry exists.
+export const findVisibleEntry = async (req, id, options = {}) => {
+  const { currentUser, condition } = await getFormEntryVisibility(req);
+  if (!currentUser) return null;
+
+  return FormEntries.findOne({
+    ...options,
+    where: { id, ...(condition ? { [Op.and]: [condition] } : {}) },
+  });
 };

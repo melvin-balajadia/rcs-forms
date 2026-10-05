@@ -218,6 +218,12 @@ const FormEntries = sequelize.define(
   {
     tableName: "form_entries",
     timestamps: true,
+    // Archived entries are hidden everywhere: lists, single-entry reads,
+    // dashboard counts, reports, and approval actions. Use
+    // FormEntries.unscoped() only where archived rows must be reached.
+    defaultScope: {
+      where: { form_entry_archivestatus: 0 },
+    },
   },
 );
 
