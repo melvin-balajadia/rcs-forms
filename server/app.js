@@ -1,6 +1,7 @@
 import express from "express";
 import cors from "cors";
 import cookieParser from "cookie-parser";
+import helmet from "helmet";
 import "express-async-errors";
 
 // Utility Imports
@@ -43,6 +44,9 @@ import dashboardRoutes from "./routes/dashboardRoutes.js";
 const app = express();
 
 // Middleware
+// Security headers. The API only serves JSON; "same-site" lets the client
+// (same host, different port) read it.
+app.use(helmet({ crossOriginResourcePolicy: { policy: "same-site" } }));
 app.use(credentials);
 app.use(cors(corsOptions));
 app.use(express.json());

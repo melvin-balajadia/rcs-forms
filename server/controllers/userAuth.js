@@ -3,6 +3,15 @@ import jwt from "jsonwebtoken";
 import bcrypt from "bcrypt";
 import Users from "../Models/Users.js";
 import { rolesFingerprint } from "../utilities/session.js";
+import {
+  lockRemainingMs,
+  recordFailure,
+  recordSuccess,
+} from "../utilities/loginThrottle.js";
+import {
+  isStrongPassword,
+  PASSWORD_RULE_MESSAGE,
+} from "../utilities/passwordPolicy.js";
 
 // Reset tokens are signed with a key derived from ACCESS_TOKEN_SECRET so they
 // can never be accepted as access tokens, and no new env variable is needed.
@@ -17,6 +26,23 @@ const resetTokenSecret = () =>
 const passwordFingerprint = (passwordHash) =>
   crypto.createHash("sha256").update(passwordHash).digest("hex").slice(0, 16);
 
+// The database stores only a SHA-256 of each refresh token, so a leaked
+// database or backup holds nothing that can be used to log in
+const hashToken = (token) =>
+  crypto.createHash("sha256").update(token).digest("hex");
+
+const ACCESS_TOKEN_TTL = "15m";
+
+// Compared against when the username doesn't exist, so a wrong username takes
+// as long to answer as a wrong password and response times reveal nothing
+const DUMMY_HASH = bcrypt.hashSync("not-a-real-password", 10);
+
+// Same answer whether the username exists, is archived, or the password is wrong
+const INVALID_LOGIN = {
+  errorStatus: true,
+  message: "Invalid username or password",
+};
+
 export const login = async (req, res) => {
   const { user_username, user_password } = req.body;
 
@@ -27,26 +53,32 @@ export const login = async (req, res) => {
     });
   }
 
+  const lockedMs = lockRemainingMs(user_username);
+  if (lockedMs > 0) {
+    const minutes = Math.ceil(lockedMs / 60000);
+    return res.status(429).json({
+      errorStatus: true,
+      message: `Too many failed attempts. Try again in ${minutes} minute${minutes === 1 ? "" : "s"}.`,
+    });
+  }
+
   try {
     const user = await Users.scope("withSecrets").findOne({
       where: { user_username },
     });
 
     // Archived accounts are treated as if they don't exist
-    if (!user || user.user_archivestatus) {
-      return res.json({
-        errorStatus: true,
-        message: "Couldn't find your account",
-      });
+    const account = user && !user.user_archivestatus ? user : null;
+    const match = await bcrypt.compare(
+      user_password,
+      account ? account.user_password : DUMMY_HASH,
+    );
+    if (!account || !match) {
+      recordFailure(user_username);
+      return res.json(INVALID_LOGIN);
     }
 
-    const match = await bcrypt.compare(user_password, user.user_password);
-    if (!match) {
-      return res.json({
-        errorStatus: true,
-        message: "Wrong password. Try again",
-      });
-    }
+    recordSuccess(user_username);
 
     if (!user.user_reset_token) {
       const resetToken = jwt.sign(
@@ -74,7 +106,7 @@ export const login = async (req, res) => {
     const accessToken = jwt.sign(
       { user_name: user.user_username, grp: rolesFingerprint(user) },
       process.env.ACCESS_TOKEN_SECRET,
-      { expiresIn: "5h" },
+      { expiresIn: ACCESS_TOKEN_TTL },
     );
 
     const refreshToken = jwt.sign(
@@ -83,7 +115,7 @@ export const login = async (req, res) => {
       { expiresIn: "1d" },
     );
 
-    await user.update({ user_refreshtoken: refreshToken });
+    await user.update({ user_refreshtoken: hashToken(refreshToken) });
 
     res.cookie("jwt", refreshToken, {
       httpOnly: true,
@@ -104,11 +136,10 @@ export const login = async (req, res) => {
       accessToken,
     });
   } catch (err) {
-    res.json({
-      ErrorMessage:
-        "Unable to process your request. Contact your administrator.",
-      Error: err.toString(),
-      ErrorState: true,
+    console.error("Login error:", err);
+    res.status(500).json({
+      errorStatus: true,
+      message: "Unable to process your request. Contact your administrator.",
     });
   }
 };
@@ -126,7 +157,7 @@ export const refreshToken = async (req, res) => {
 
   try {
     const user = await Users.findOne({
-      where: { user_refreshtoken: refreshToken },
+      where: { user_refreshtoken: hashToken(refreshToken) },
     });
     // Archived accounts, and accounts with a pending password reset, must log
     // in again (login sends a pending reset to the reset page)
@@ -148,7 +179,7 @@ export const refreshToken = async (req, res) => {
             grp: rolesFingerprint(user),
           },
           process.env.ACCESS_TOKEN_SECRET,
-          { expiresIn: "5h" },
+          { expiresIn: ACCESS_TOKEN_TTL },
         );
 
         res.json({
@@ -167,10 +198,8 @@ export const refreshToken = async (req, res) => {
       },
     );
   } catch (err) {
-    res.status(500).json({
-      message: "Unable to refresh token",
-      error: err.toString(),
-    });
+    console.error("Refresh token error:", err);
+    res.status(500).json({ message: "Unable to refresh token" });
   }
 };
 
@@ -182,7 +211,7 @@ export const logout = async (req, res) => {
 
   try {
     const user = await Users.findOne({
-      where: { user_refreshtoken: refreshToken },
+      where: { user_refreshtoken: hashToken(refreshToken) },
     });
 
     if (!user) {
@@ -204,10 +233,10 @@ export const logout = async (req, res) => {
 
     return res.sendStatus(204); // No content
   } catch (err) {
+    console.error("Logout error:", err);
     return res.status(500).json({
       errorStatus: true,
       message: "Unable to logout",
-      error: err.message,
     });
   }
 };
@@ -223,13 +252,8 @@ export const resetPassword = async (req, res) => {
     return res.json({ errorStatus: true, message: "Passwords do not match" });
   }
 
-  const passwordRegex = /^(?=.*[A-Z])(?=.*[0-9])(?=.*[^a-zA-Z0-9]).{8,}$/;
-  if (!passwordRegex.test(newPassword)) {
-    return res.json({
-      errorStatus: true,
-      message:
-        "Password must be at least 8 characters with an uppercase letter, number, and special character",
-    });
+  if (!isStrongPassword(newPassword)) {
+    return res.json({ errorStatus: true, message: PASSWORD_RULE_MESSAGE });
   }
 
   const invalidLink = {

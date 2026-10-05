@@ -12,8 +12,10 @@ const verifyJWT = async (req, res, next) => {
   let decoded;
   try {
     decoded = jwt.verify(token, process.env.ACCESS_TOKEN_SECRET);
-  } catch {
-    return res.sendStatus(403); //invalid token
+  } catch (err) {
+    // Expired: 401 so the client quietly refreshes and retries.
+    // Forged or malformed: 403.
+    return res.sendStatus(err.name === "TokenExpiredError" ? 401 : 403);
   }
 
   const user = await Users.findOne({
