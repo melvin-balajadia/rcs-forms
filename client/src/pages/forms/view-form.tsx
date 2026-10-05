@@ -16,10 +16,39 @@ export default function ViewForm() {
     isError,
   } = useFetch<any>(["form", formId ?? ""], `/forms/get/${formId}`);
 
-  if (!formId) return <div className="p-6 text-red-500">Invalid form ID.</div>;
-  if (isLoading) return <div className="p-6">Loading form...</div>;
-  if (isError || !form)
-    return <div className="p-6 text-red-500">Failed to load form.</div>;
+  const renderBody = () => {
+    if (!formId) {
+      return <p className="text-center text-red-500 py-12">Invalid form ID.</p>;
+    }
+    if (isLoading) {
+      return (
+        <div className="flex items-center justify-center py-12">
+          <div className="w-6 h-6 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+        </div>
+      );
+    }
+    if (isError || !form) {
+      return (
+        <p className="text-center text-red-500 py-12">Failed to load form.</p>
+      );
+    }
+    return null;
+  };
+
+  if (!formId || isLoading || isError || !form) {
+    return (
+      <div className="mx-6 mt-5">
+        <PageHeader
+          icon={<LuEye className="text-2xl text-font-main" />}
+          title="View Form"
+          buttonText="Go Back"
+          onButtonClick={() => navigate("/forms")}
+          variant="default"
+        />
+        {renderBody()}
+      </div>
+    );
+  }
 
   const sections =
     form.sections?.map((section: any) => ({

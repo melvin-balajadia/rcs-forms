@@ -410,9 +410,27 @@ export const getFormSectionsWithMultiple = async (req, res) => {
   }
 };
 
+const computeAreaAverage = (answers, condition) => {
+  const totalAnswers = answers.length;
+  const yesCount = answers.filter((a) => a.form_value === "Y").length;
+  const noCount = answers.filter((a) => a.form_value === "N").length;
+  const naCount = answers.filter((a) => a.form_value === "NA").length;
+
+  const conditionCount = { Y: yesCount, N: noCount, NA: naCount }[condition];
+
+  const averagePercentage =
+    totalAnswers > 0 ? ((conditionCount / totalAnswers) * 100).toFixed(2) : 0;
+
+  return {
+    total_answers: totalAnswers,
+    breakdown: { yes: yesCount, no: noCount, na: naCount },
+    average_percentage: parseFloat(averagePercentage),
+  };
+};
+
 export const generateOverallAverage = async (req, res) => {
   try {
-    const { entry_ids, condition, section_id } = req.body;
+    const { entry_ids, condition, section_id, compare_area } = req.body;
 
     if (!entry_ids || !Array.isArray(entry_ids) || entry_ids.length === 0) {
       return res.status(400).json({
@@ -467,31 +485,55 @@ export const generateOverallAverage = async (req, res) => {
       raw: true,
     });
 
-    const totalAnswers = answers.length;
-    const yesCount = answers.filter((a) => a.form_value === "Y").length;
-    const noCount = answers.filter((a) => a.form_value === "N").length;
-    const naCount = answers.filter((a) => a.form_value === "NA").length;
+    const conditionLabels = { Y: "Yes", N: "No", NA: "N/A" };
+    const conditionLabel = conditionLabels[condition];
 
-    let conditionCount = 0;
-    let conditionLabel = "";
+    const overallResult = computeAreaAverage(answers, condition);
 
-    switch (condition) {
-      case "Y":
-        conditionCount = yesCount;
-        conditionLabel = "Yes";
-        break;
-      case "N":
-        conditionCount = noCount;
-        conditionLabel = "No";
-        break;
-      case "NA":
-        conditionCount = naCount;
-        conditionLabel = "N/A";
-        break;
+    let areaComparison = null;
+
+    if (compare_area) {
+      const entriesWithArea = await FormEntries.findAll({
+        where: { id: { [Op.in]: entry_ids } },
+        attributes: ["id", "form_entry_area"],
+        raw: true,
+      });
+
+      const mainIds = entriesWithArea
+        .filter((e) => e.form_entry_area === "Main")
+        .map((e) => e.id);
+      const annexIds = entriesWithArea
+        .filter((e) => e.form_entry_area === "Annex")
+        .map((e) => e.id);
+
+      const computeForEntryIds = async (ids) => {
+        if (ids.length === 0) {
+          return { total_entries: 0, ...computeAreaAverage([], condition) };
+        }
+
+        const areaAnswers = await FormQuestionValue.findAll({
+          where: {
+            form_entry_id: { [Op.in]: ids },
+            form_question_id: { [Op.in]: questionIds },
+            form_value: { [Op.in]: ["Y", "N", "NA"] },
+          },
+          attributes: ["form_value"],
+          raw: true,
+        });
+
+        return {
+          total_entries: ids.length,
+          ...computeAreaAverage(areaAnswers, condition),
+        };
+      };
+
+      const [mainResult, annexResult] = await Promise.all([
+        computeForEntryIds(mainIds),
+        computeForEntryIds(annexIds),
+      ]);
+
+      areaComparison = { main: mainResult, annex: annexResult };
     }
-
-    const averagePercentage =
-      totalAnswers > 0 ? ((conditionCount / totalAnswers) * 100).toFixed(2) : 0;
 
     const chartData = {
       chart_type: "overall",
@@ -499,19 +541,16 @@ export const generateOverallAverage = async (req, res) => {
       condition_label: conditionLabel,
       total_entries: entry_ids.length,
       total_questions: questions.length,
-      total_answers: totalAnswers,
-      breakdown: {
-        yes: yesCount,
-        no: noCount,
-        na: naCount,
-      },
-      average_percentage: parseFloat(averagePercentage),
+      total_answers: overallResult.total_answers,
+      breakdown: overallResult.breakdown,
+      average_percentage: overallResult.average_percentage,
       section_info: section_id
         ? {
             section_id: section_id,
             section_name: questions[0]?.FormSection?.form_section_name || "N/A",
           }
         : null,
+      area_comparison: areaComparison,
     };
 
     return res.status(200).json({

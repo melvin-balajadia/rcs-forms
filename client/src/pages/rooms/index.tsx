@@ -105,9 +105,6 @@ export default function Rooms() {
     },
   ];
 
-  if (isLoading) return <p>Loading...</p>;
-  if (isError) return <p>Error fetching rooms!</p>;
-
   return (
     <div className="mx-6 mt-5">
       <PageHeader
@@ -119,19 +116,29 @@ export default function Rooms() {
       />
 
       <div className="bg-white shadow-md p-4 rounded mt-1">
-        <PageTable<Room>
-          data={data?.rooms ?? []}
-          columns={columns}
-          manualPagination
-          totalItems={data?.total ?? 0}
-          pageIndex={pageIndex}
-          pageSize={pageSize}
-          onPageChange={(newPage) => setPageIndex(newPage)}
-          onPageSizeChange={(newSize) => {
-            setPageSize(newSize);
-            setPageIndex(0);
-          }}
-        />
+        {isLoading ? (
+          <div className="flex items-center justify-center py-12">
+            <div className="w-6 h-6 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+          </div>
+        ) : isError ? (
+          <p className="text-center text-red-500 py-12">
+            Error fetching rooms!
+          </p>
+        ) : (
+          <PageTable<Room>
+            data={data?.rooms ?? []}
+            columns={columns}
+            manualPagination
+            totalItems={data?.total ?? 0}
+            pageIndex={pageIndex}
+            pageSize={pageSize}
+            onPageChange={(newPage) => setPageIndex(newPage)}
+            onPageSizeChange={(newSize) => {
+              setPageSize(newSize);
+              setPageIndex(0);
+            }}
+          />
+        )}
       </div>
     </div>
   );

@@ -275,7 +275,9 @@ export default function ViewFormEntry() {
           variant="default"
         />
         <div className="bg-white shadow-md p-4 rounded mt-1">
-          <p className="text-center text-gray-500">Loading form entry...</p>
+          <div className="flex items-center justify-center py-12">
+            <div className="w-6 h-6 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+          </div>
         </div>
       </div>
     );

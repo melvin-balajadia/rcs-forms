@@ -16,16 +16,29 @@ export default function ViewUser() {
     isError,
   } = useFetch<any>(["user-management", id ?? ""], `/users/get/${id}`);
 
-  if (!id) {
-    return <div className="p-6 text-red-500">Invalid user ID.</div>;
-  }
-
-  if (isLoading) {
-    return <div className="p-6">Loading user...</div>;
-  }
-
-  if (isError || !user) {
-    return <div className="p-6 text-red-500">Failed to load user.</div>;
+  if (!id || isLoading || isError || !user) {
+    return (
+      <div className="mx-6">
+        <PageHeader
+          icon={<LuEye className="text-2xl text-font-main" />}
+          title="View User"
+          buttonText="Go Back"
+          onButtonClick={() => navigate("/user-management")}
+          variant="default"
+        />
+        {!id ? (
+          <p className="text-center text-red-500 py-12">Invalid user ID.</p>
+        ) : isLoading ? (
+          <div className="flex items-center justify-center py-12">
+            <div className="w-6 h-6 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+          </div>
+        ) : (
+          <p className="text-center text-red-500 py-12">
+            Failed to load user.
+          </p>
+        )}
+      </div>
+    );
   }
 
   // ✅ API should return { ErrorState, ErrorMessage, data }

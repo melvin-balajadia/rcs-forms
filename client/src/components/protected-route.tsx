@@ -1,16 +1,12 @@
 // components/ProtectedRoute.tsx
 import { Navigate, Outlet } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
-import { usePersistLogin } from "@/hooks/userPersistLogin";
 
 export default function ProtectedRoute() {
   const { accessToken } = useAuth();
-  const { loading } = usePersistLogin();
 
-  if (loading) {
-    return <div>Loading session...</div>; // avoid blank screen
-  }
-
+  // ✅ AuthWrapper already blocks rendering until the session check resolves,
+  // so accessToken is always settled by the time this mounts.
   if (!accessToken) {
     return <Navigate to="/login" replace />;
   }

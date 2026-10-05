@@ -87,9 +87,6 @@ export default function Forms() {
     },
   ];
 
-  if (isLoading) return <p>Loading forms...</p>;
-  if (isError) return <p>Error fetching forms!</p>;
-
   // ✅ Map API forms -> table rows
   const mappedForms: Form[] =
     data?.forms.map((form) => ({
@@ -109,19 +106,29 @@ export default function Forms() {
       />
 
       <div className="bg-white shadow-md p-4 rounded mt-1">
-        <PageTable<Form>
-          data={mappedForms}
-          columns={columns}
-          manualPagination
-          totalItems={data?.total ?? 0}
-          pageIndex={pageIndex}
-          pageSize={pageSize}
-          onPageChange={(newPage) => setPageIndex(newPage)}
-          onPageSizeChange={(newSize) => {
-            setPageSize(newSize);
-            setPageIndex(0);
-          }}
-        />
+        {isLoading ? (
+          <div className="flex items-center justify-center py-12">
+            <div className="w-6 h-6 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+          </div>
+        ) : isError ? (
+          <p className="text-center text-red-500 py-12">
+            Error fetching forms!
+          </p>
+        ) : (
+          <PageTable<Form>
+            data={mappedForms}
+            columns={columns}
+            manualPagination
+            totalItems={data?.total ?? 0}
+            pageIndex={pageIndex}
+            pageSize={pageSize}
+            onPageChange={(newPage) => setPageIndex(newPage)}
+            onPageSizeChange={(newSize) => {
+              setPageSize(newSize);
+              setPageIndex(0);
+            }}
+          />
+        )}
       </div>
     </div>
   );

@@ -41,6 +41,7 @@ type SavedReport = {
   chart_type: string;
   chart_condition: string;
   chart_section_id: number | null;
+  compare_area: boolean;
   snapshot_overall_average: number | null;
   snapshot_yes_total: number | null;
   snapshot_no_total: number | null;
@@ -55,6 +56,7 @@ type SavedReport = {
     section_id: number | null;
     question_id: number | null;
     section_name: string | null;
+    area_label: string | null;
     question_text: string | null;
     total_questions: number | null;
     total_answers: number;
@@ -150,7 +152,7 @@ export default function ViewReport() {
         />
         <div className="bg-white shadow-md p-4 rounded mt-1">
           <div className="flex justify-center items-center h-48">
-            <p className="text-gray-500">Loading report...</p>
+            <div className="w-6 h-6 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
           </div>
         </div>
       </div>
@@ -188,6 +190,17 @@ export default function ViewReport() {
       questions: NonNullable<SavedReport["report_data"]>;
     }
   > = {};
+
+  const areaComparisonRows =
+    report.compare_area && report.report_data
+      ? report.report_data.filter((item) => item.data_type === "area")
+      : [];
+  const mainAreaData = areaComparisonRows.find(
+    (item) => item.area_label === "Main",
+  );
+  const annexAreaData = areaComparisonRows.find(
+    (item) => item.area_label === "Annex",
+  );
 
   if (report.chart_type === "per_question" && report.report_data) {
     report.report_data.forEach((item) => {
@@ -447,63 +460,169 @@ export default function ViewReport() {
                 </p>
               </div>
 
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-6 text-center">
-                <p className="text-sm text-gray-600 mb-2">Average Percentage</p>
-                <p className="text-5xl font-bold text-blue-600">
-                  {fmt(report.snapshot_overall_average)}%
-                </p>
-              </div>
+              {report.compare_area && mainAreaData && annexAreaData ? (
+                /* Main vs Annex Comparison */
+                <div className="space-y-6">
+                  <div className="flex items-center justify-center">
+                    <ResponsiveContainer width="100%" height={280}>
+                      <BarChart
+                        data={[
+                          {
+                            name: "Main",
+                            percentage: mainAreaData.average_percentage,
+                          },
+                          {
+                            name: "Annex",
+                            percentage: annexAreaData.average_percentage,
+                          },
+                        ]}
+                        margin={{ top: 20, right: 30, left: 20, bottom: 20 }}
+                      >
+                        <CartesianGrid strokeDasharray="3 3" />
+                        <XAxis dataKey="name" tick={{ fontSize: 13 }} />
+                        <YAxis
+                          domain={[0, 100]}
+                          label={{
+                            value: "Percentage (%)",
+                            angle: -90,
+                            position: "insideLeft",
+                          }}
+                        />
+                        <Tooltip />
+                        <Legend />
+                        <Bar
+                          dataKey="percentage"
+                          name={`${conditionLabel[report.chart_condition]} %`}
+                          radius={[8, 8, 0, 0]}
+                        >
+                          <Cell fill="#3b82f6" />
+                          <Cell fill="#8b5cf6" />
+                        </Bar>
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
 
-              <div className="grid grid-cols-3 gap-4">
-                <div className="bg-green-50 border border-green-200 rounded-lg p-4 text-center">
-                  <p className="text-sm text-gray-600">Yes</p>
-                  <p className="text-2xl font-bold text-green-600">
-                    {report.snapshot_yes_total}
-                  </p>
-                  <p className="text-xs text-gray-500">
-                    {pct(
-                      report.snapshot_yes_total,
-                      report.snapshot_total_answers,
-                    )}
-                    %
-                  </p>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {(
+                      [
+                        {
+                          label: "Main",
+                          data: mainAreaData,
+                          cardColor: "border-blue-200 bg-blue-50",
+                          textColor: "text-blue-600",
+                        },
+                        {
+                          label: "Annex",
+                          data: annexAreaData,
+                          cardColor: "border-purple-200 bg-purple-50",
+                          textColor: "text-purple-600",
+                        },
+                      ] as const
+                    ).map(({ label, data, cardColor, textColor }) => (
+                      <div
+                        key={label}
+                        className={`border rounded-lg p-4 ${cardColor}`}
+                      >
+                        <div className="flex justify-between items-start mb-3">
+                          <div>
+                            <h5 className="font-medium text-gray-800">
+                              {label}
+                            </h5>
+                            <p className="text-sm text-gray-500">
+                              {data.total_answers} total answers
+                            </p>
+                          </div>
+                          <p className={`text-3xl font-bold ${textColor}`}>
+                            {fmt(data.average_percentage)}%
+                          </p>
+                        </div>
+                        <div className="grid grid-cols-3 gap-2">
+                          <div className="bg-green-50 border border-green-200 rounded p-2 text-center">
+                            <p className="text-xs text-gray-600">Yes</p>
+                            <p className="text-lg font-bold text-green-600">
+                              {data.yes_count}
+                            </p>
+                          </div>
+                          <div className="bg-red-50 border border-red-200 rounded p-2 text-center">
+                            <p className="text-xs text-gray-600">No</p>
+                            <p className="text-lg font-bold text-red-600">
+                              {data.no_count}
+                            </p>
+                          </div>
+                          <div className="bg-gray-50 border border-gray-200 rounded p-2 text-center">
+                            <p className="text-xs text-gray-600">N/A</p>
+                            <p className="text-lg font-bold text-gray-600">
+                              {data.na_count}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
                 </div>
-                <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-center">
-                  <p className="text-sm text-gray-600">No</p>
-                  <p className="text-2xl font-bold text-red-600">
-                    {report.snapshot_no_total}
-                  </p>
-                  <p className="text-xs text-gray-500">
-                    {pct(
-                      report.snapshot_no_total,
-                      report.snapshot_total_answers,
-                    )}
-                    %
-                  </p>
-                </div>
-                <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 text-center">
-                  <p className="text-sm text-gray-600">N/A</p>
-                  <p className="text-2xl font-bold text-gray-600">
-                    {report.snapshot_na_total}
-                  </p>
-                  <p className="text-xs text-gray-500">
-                    {pct(
-                      report.snapshot_na_total,
-                      report.snapshot_total_answers,
-                    )}
-                    %
-                  </p>
-                </div>
-              </div>
+              ) : (
+                <>
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-6 text-center">
+                    <p className="text-sm text-gray-600 mb-2">
+                      Average Percentage
+                    </p>
+                    <p className="text-5xl font-bold text-blue-600">
+                      {fmt(report.snapshot_overall_average)}%
+                    </p>
+                  </div>
 
-              <div className="text-sm text-gray-600 bg-gray-50 p-4 rounded">
-                <p className="font-medium mb-2">Summary:</p>
-                <p>
-                  Out of {report.snapshot_total_answers} total answers,{" "}
-                  {fmt(report.snapshot_overall_average)}% were "
-                  {conditionLabel[report.chart_condition]}" responses.
-                </p>
-              </div>
+                  <div className="grid grid-cols-3 gap-4">
+                    <div className="bg-green-50 border border-green-200 rounded-lg p-4 text-center">
+                      <p className="text-sm text-gray-600">Yes</p>
+                      <p className="text-2xl font-bold text-green-600">
+                        {report.snapshot_yes_total}
+                      </p>
+                      <p className="text-xs text-gray-500">
+                        {pct(
+                          report.snapshot_yes_total,
+                          report.snapshot_total_answers,
+                        )}
+                        %
+                      </p>
+                    </div>
+                    <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-center">
+                      <p className="text-sm text-gray-600">No</p>
+                      <p className="text-2xl font-bold text-red-600">
+                        {report.snapshot_no_total}
+                      </p>
+                      <p className="text-xs text-gray-500">
+                        {pct(
+                          report.snapshot_no_total,
+                          report.snapshot_total_answers,
+                        )}
+                        %
+                      </p>
+                    </div>
+                    <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 text-center">
+                      <p className="text-sm text-gray-600">N/A</p>
+                      <p className="text-2xl font-bold text-gray-600">
+                        {report.snapshot_na_total}
+                      </p>
+                      <p className="text-xs text-gray-500">
+                        {pct(
+                          report.snapshot_na_total,
+                          report.snapshot_total_answers,
+                        )}
+                        %
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="text-sm text-gray-600 bg-gray-50 p-4 rounded">
+                    <p className="font-medium mb-2">Summary:</p>
+                    <p>
+                      Out of {report.snapshot_total_answers} total answers,{" "}
+                      {fmt(report.snapshot_overall_average)}% were "
+                      {conditionLabel[report.chart_condition]}" responses.
+                    </p>
+                  </div>
+                </>
+              )}
             </div>
           )}
 
