@@ -127,6 +127,15 @@ const Users = sequelize.define(
   {
     tableName: "users",
     timestamps: true,
+    // Never send the password hash or refresh token to clients. This also
+    // applies when Users is included from other models (e.g. FormEntries).
+    defaultScope: {
+      attributes: { exclude: ["user_password", "user_refreshtoken"] },
+    },
+    scopes: {
+      // Only for auth flows that must read the password hash
+      withSecrets: {},
+    },
     indexes: [
       {
         unique: true,

@@ -9,7 +9,7 @@ import { useNavigate, useLocation, Navigate } from "react-router-dom";
 import Spinner from "@/components/spinner";
 
 type ResetPasswordRequest = {
-  userId: number;
+  resetToken: string;
   newPassword: string;
   confirmPassword: string;
 };
@@ -22,7 +22,7 @@ type ResetPasswordResponse = {
 export default function ResetPasswordPage() {
   const navigate = useNavigate();
   const location = useLocation();
-  const userId = location.state?.userId as number;
+  const resetToken = location.state?.resetToken as string;
 
   const [form, setForm] = useState({
     newPassword: "",
@@ -60,7 +60,7 @@ export default function ResetPasswordPage() {
     },
   });
 
-  if (!userId) {
+  if (!resetToken) {
     return <Navigate to="/login" replace />;
   }
 
@@ -70,7 +70,7 @@ export default function ResetPasswordPage() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    resetMutation.mutate({ userId, ...form });
+    resetMutation.mutate({ resetToken, ...form });
   };
 
   return (

@@ -12,7 +12,7 @@ import {
 
 const router = express.Router();
 
-router.get("/all", getClients);
+router.get("/all", verifyJWT, getClients);
 router.post("/create", verifyJWT, createClients);
 router.get("/get/:id", verifyJWT, getClientsById);
 router.put("/update/:id", verifyJWT, updateClients);

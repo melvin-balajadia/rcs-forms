@@ -12,6 +12,8 @@ import {
 
 const router = express.Router();
 
+router.use(verifyJWT);
+
 router.get("/all", getQuestions);
 router.get("/get/:id", getQuestionById);
 router.get("/get-form/:id", getQuestionsByFormId);

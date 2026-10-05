@@ -16,6 +16,7 @@ type LoginRequest = {
 type LoginResponse = {
   errorStatus: boolean;
   requiresReset?: boolean;
+  resetToken?: string;
   message?: string;
   userSite?: string;
   userId?: number;
@@ -54,7 +55,9 @@ export default function LoginPage() {
       }
 
       if (data.requiresReset) {
-        navigate("/reset-password", { state: { userId: data.userId } });
+        navigate("/reset-password", {
+          state: { resetToken: data.resetToken },
+        });
         return;
       }
 
