@@ -24,6 +24,15 @@ const dayRange = (from, to) => {
   return { [Op.gte]: from, [Op.lt]: end.toISOString().slice(0, 10) };
 };
 
+// The same, for a timestamp column: whole Manila days, both inclusive
+const manilaDayRange = (from, to) => {
+  if (!isDay(from) || !isDay(to)) fail(400, "Invalid date range");
+  return {
+    [Op.gte]: manilaDayStart(from),
+    [Op.lt]: manilaDayStart(addDays(to, 1)),
+  };
+};
+
 // Every entry (admin-only route, not used by the UI)
 export const listAllEntries = () => FormEntries.findAll({ include: Users });
 
@@ -40,6 +49,8 @@ export const listEntries = async (req) => {
     to,
     completed_from,
     completed_to,
+    returned_from,
+    returned_to,
     status,
   } = req.query;
 
@@ -53,11 +64,12 @@ export const listEntries = async (req) => {
   // Completed between two Manila days (the final approval's date) — what the
   // dashboard's "accomplished per day" chart counts, so its bars link here
   if (completed_from && completed_to) {
-    if (!isDay(completed_from) || !isDay(completed_to)) fail(400, "Invalid date range");
-    where.form_entry_thirdapprover_datetime = {
-      [Op.gte]: manilaDayStart(completed_from),
-      [Op.lt]: manilaDayStart(addDays(completed_to, 1)),
-    };
+    where.form_entry_thirdapprover_datetime = manilaDayRange(completed_from, completed_to);
+  }
+  // Last returned between two Manila days — the dashboard's "most returned
+  // forms" list
+  if (returned_from && returned_to) {
+    where.form_entry_returner_datetime = manilaDayRange(returned_from, returned_to);
   }
 
   // A single status or a comma-separated list (some display labels like

@@ -53,7 +53,7 @@ beforeEach(async () => {
 });
 
 const charts = async (who, query = RANGE) => {
-  const res = await api.get(`/api/dashboard/charts?${query}`).set(authHeader(who));
+  const res = await api.get(`/api/dashboard/analytics?${query}`).set(authHeader(who));
   expect(res.status, JSON.stringify(res.body)).toBe(200);
   return res.body;
 };
@@ -140,14 +140,14 @@ describe("dashboard charts", () => {
     ["from=2025-01-01&to=2026-10-01", "Date range is too long (max 366 days)"],
     [`${RANGE}&area=Basement`, "Invalid area"],
   ])("refuses %s", async (query, message) => {
-    const res = await api.get(`/api/dashboard/charts?${query}`).set(authHeader(qfd));
+    const res = await api.get(`/api/dashboard/analytics?${query}`).set(authHeader(qfd));
     expect(res.status).toBe(400);
     expect(res.body.message).toBe(message);
   });
 
   it("all_access picking an unknown site gets 400", async () => {
     const res = await api
-      .get(`/api/dashboard/charts?${RANGE}&site=Narnia`)
+      .get(`/api/dashboard/analytics?${RANGE}&site=Narnia`)
       .set(authHeader(it_admin));
     expect(res.status).toBe(400);
   });

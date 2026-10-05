@@ -45,7 +45,7 @@ export const resolveDashboardFilters = (user, query) => {
 };
 
 // Entries this user may see, at the dashboard's site and area
-const scopeConditions = async (req, { site, area }) => {
+export const scopeConditions = async (req, { site, area }) => {
   const { condition } = await getFormEntryVisibility(req);
   return [
     { form_entry_site: site },
@@ -56,36 +56,13 @@ const scopeConditions = async (req, { site, area }) => {
 
 const emptyDay = (date) => ({ date, Main: 0, Annex: 0, Other: 0, total: 0 });
 
-// GET /api/dashboard/charts
-export const getDashboardCharts = async (req) => {
-  const filters = resolveDashboardFilters(req.user, req.query);
-  const { from, to, site, area, canChooseSite } = filters;
-
-  const base = {
-    site,
-    area: area ?? "All",
-    from,
-    to,
-    canChooseSite,
-    sites: canChooseSite ? VALID_SITES : site ? [site] : [],
-    // Requestors only ever see their own entries
-    scope: hasRole(req.user, "approver", "qfd_admin", "all_access") ? "site" : "mine",
-  };
-
+// Forms accomplished per day: completed entries, dated by their final (third)
+// approval, grouped by Manila day and area. Every day in the range is listed.
+export const accomplishedPerDay = async (scope, { from, to }) => {
   const days = eachDay(from, to).map(emptyDay);
-  if (!site) {
-    // A user without a site has nothing to show yet
-    return {
-      ...base,
-      accomplished: { total: 0, byArea: { Main: 0, Annex: 0, Other: 0 }, days },
-      byForm: { total: 0, forms: [] },
-    };
-  }
+  const byArea = { Main: 0, Annex: 0, Other: 0 };
+  if (!scope) return { total: 0, byArea, days };
 
-  const scope = await scopeConditions(req, filters);
-
-  // 1. Forms accomplished per day: completed entries, dated by their final
-  //    (third) approval, grouped by Manila day and area
   const completed = await FormEntries.findAll({
     where: {
       [Op.and]: [
@@ -104,7 +81,6 @@ export const getDashboardCharts = async (req) => {
   });
 
   const byDay = new Map(days.map((d) => [d.date, d]));
-  const byArea = { Main: 0, Annex: 0, Other: 0 };
   for (const row of completed) {
     const day = byDay.get(manilaDay(row.form_entry_thirdapprover_datetime));
     if (!day) continue;
@@ -113,21 +89,24 @@ export const getDashboardCharts = async (req) => {
     day.total += 1;
     byArea[key] += 1;
   }
+  return { total: completed.length, byArea, days };
+};
 
-  // 2. Entries per form, by entry date (the date chosen on the form), counted
-  //    in the database
+// Entries per form, by entry date (the date chosen on the form), counted in
+// the database, most first
+export const entriesPerForm = async (scope, { from, to }) => {
+  if (!scope) return { total: 0, forms: [] };
+  const forms = await countByForm([
+    ...scope,
+    { form_entry_date: { [Op.gte]: from, [Op.lt]: addDays(to, 1) } },
+  ]);
+  return { total: forms.reduce((sum, f) => sum + f.count, 0), forms };
+};
+
+// Entries matching `conditions`, counted per form, with each form's name
+export const countByForm = async (conditions) => {
   const counts = await FormEntries.count({
-    where: {
-      [Op.and]: [
-        ...scope,
-        {
-          form_entry_date: {
-            [Op.gte]: from,
-            [Op.lt]: addDays(to, 1),
-          },
-        },
-      ],
-    },
+    where: { [Op.and]: conditions },
     group: ["form_id"],
   });
   const forms = await Forms.findAll({
@@ -135,20 +114,11 @@ export const getDashboardCharts = async (req) => {
     attributes: ["id", "form_name"],
   });
   const nameOf = new Map(forms.map((f) => [f.id, f.form_name]));
-  const byForm = counts
+  return counts
     .map((c) => ({
       form_id: c.form_id,
       form_name: nameOf.get(c.form_id) ?? `Form #${c.form_id}`,
       count: Number(c.count),
     }))
     .sort((a, b) => b.count - a.count || a.form_name.localeCompare(b.form_name));
-
-  return {
-    ...base,
-    accomplished: { total: completed.length, byArea, days },
-    byForm: {
-      total: byForm.reduce((sum, f) => sum + f.count, 0),
-      forms: byForm,
-    },
-  };
 };

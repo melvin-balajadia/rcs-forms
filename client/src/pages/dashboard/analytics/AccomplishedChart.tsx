@@ -1,8 +1,8 @@
 import { useState } from "react";
 import {
-  Bar,
-  BarChart,
   CartesianGrid,
+  Line,
+  LineChart,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -10,16 +10,16 @@ import {
 } from "recharts";
 import { formatDay } from "@/lib/dates";
 import { ANIMATE, AREA_COLORS, INK } from "./theme";
-import type { AreaKey, DashboardCharts, DayRow } from "./types";
+import type { AreaKey, DashboardAnalytics, DayRow } from "./types";
 
 type Props = {
-  data: DashboardCharts["accomplished"];
-  area: DashboardCharts["area"];
+  data: DashboardAnalytics["accomplished"];
+  area: DashboardAnalytics["area"];
   // Opens the entries behind a bar (one day, optionally one area)
   onDrill: (date: string, area: AreaKey | null) => void;
 };
 
-// Forms accomplished (completed) per day, stacked by area
+// Forms accomplished (completed) per day: one line per area
 export default function AccomplishedChart({ data, area, onDrill }: Props) {
   const [hidden, setHidden] = useState<Set<AreaKey>>(new Set());
 
@@ -85,10 +85,16 @@ export default function AccomplishedChart({ data, area, onDrill }: Props) {
       )}
 
       <ResponsiveContainer width="100%" height={280}>
-        <BarChart
+        <LineChart
           data={data.days}
-          margin={{ top: 8, right: 8, left: -12, bottom: 0 }}
-          barCategoryGap={data.days.length > 45 ? "12%" : "28%"}
+          margin={{ top: 8, right: 12, left: -12, bottom: 0 }}
+          // Click anywhere on a day to open what was completed that day
+          onClick={(state: { activeLabel?: string | number } | null) => {
+            const date = state?.activeLabel ? String(state.activeLabel) : null;
+            const day = date ? data.days.find((d) => d.date === date) : null;
+            if (day && day.total > 0) onDrill(day.date, area === "All" ? null : area);
+          }}
+          style={{ cursor: "pointer" }}
         >
           <CartesianGrid vertical={false} stroke={INK.grid} />
           <XAxis
@@ -98,6 +104,7 @@ export default function AccomplishedChart({ data, area, onDrill }: Props) {
             axisLine={{ stroke: INK.axis }}
             tickLine={false}
             minTickGap={20}
+            padding={{ left: 8, right: 8 }}
           />
           <YAxis
             allowDecimals={false}
@@ -107,72 +114,30 @@ export default function AccomplishedChart({ data, area, onDrill }: Props) {
             width={44}
           />
           <Tooltip
-            cursor={{ fill: INK.hover }}
+            cursor={{ stroke: INK.axis, strokeDasharray: "3 3" }}
             content={<DayTooltip series={visible} />}
           />
-          {visible.map((key, i) => (
-            <Bar
+          {visible.map((key) => (
+            <Line
               key={key}
               dataKey={key}
               name={key}
-              stackId="day"
-              fill={AREA_COLORS[key]}
-              // 1px surface gap between stacked segments
-              stroke="#ffffff"
-              strokeWidth={visible.length > 1 ? 1 : 0}
-              // Round the top of whichever segment is highest on that day
-              shape={(props: SegmentProps) => (
-                <StackSegment {...props} keysAbove={visible.slice(i + 1)} />
-              )}
-              maxBarSize={40}
+              type="linear"
+              stroke={AREA_COLORS[key]}
+              strokeWidth={2}
+              // Dots only when there are few enough days to tell them apart
+              dot={data.days.length <= 31 ? { r: 2.5, strokeWidth: 0, fill: AREA_COLORS[key] } : false}
+              activeDot={{ r: 5, strokeWidth: 2, stroke: "#ffffff" }}
               isAnimationActive={ANIMATE}
-              activeBar={{ fillOpacity: 0.8 }}
-              cursor="pointer"
-              onClick={(bar: { payload?: DayRow }) => {
-                if (bar.payload && bar.payload.total > 0)
-                  onDrill(bar.payload.date, area === "All" ? key : area);
-              }}
             />
           ))}
-        </BarChart>
+        </LineChart>
       </ResponsiveContainer>
       <p className="mt-1 text-xs text-gray-400">
-        Click a bar to open those entries.
+        Click a day to open the entries completed that day.
       </p>
     </div>
   );
-}
-
-type SegmentProps = {
-  x?: number;
-  y?: number;
-  width?: number;
-  height?: number;
-  fill?: string;
-  fillOpacity?: number | string;
-  stroke?: string;
-  strokeWidth?: number | string;
-  payload?: DayRow;
-};
-
-// One stacked segment. Only the day's highest non-empty segment gets the 4px
-// rounded top, so every column ends the same way whatever its mix of areas.
-function StackSegment({
-  x = 0,
-  y = 0,
-  width = 0,
-  height = 0,
-  payload,
-  keysAbove,
-  ...paint
-}: SegmentProps & { keysAbove: AreaKey[] }) {
-  if (height <= 0 || width <= 0) return null;
-  const isTop = !payload || keysAbove.every((k) => !payload[k]);
-  const r = isTop ? Math.min(4, width / 2, height) : 0;
-  const d = r
-    ? `M${x},${y + height}V${y + r}Q${x},${y} ${x + r},${y}H${x + width - r}Q${x + width},${y} ${x + width},${y + r}V${y + height}Z`
-    : `M${x},${y}H${x + width}V${y + height}H${x}Z`;
-  return <path d={d} {...paint} />;
 }
 
 type TooltipProps = {

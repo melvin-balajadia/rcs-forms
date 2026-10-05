@@ -7,7 +7,7 @@ import {
 } from "../controllers/dashboardController.js";
 import verifyJWT from "../middleware/verifyJWT.js";
 import { handle } from "../utilities/http.js";
-import { getDashboardCharts } from "../services/dashboard/charts.js";
+import { getDashboardAnalytics } from "../services/dashboard/analytics.js";
 
 const router = express.Router();
 
@@ -22,12 +22,12 @@ router.get("/recent-entries", getRecentEntries);
 // ✅ Single endpoint for all dashboard data (recommended for performance)
 router.get("/all", getAllDashboardData);
 
-// Charts for the dashboard's analytics section (?from&to&area&site)
+// Everything in the dashboard analytics section (?from&to&area&site)
 router.get(
-  "/charts",
+  "/analytics",
   handle(async (req, res) => {
-    res.status(200).json(await getDashboardCharts(req));
-  }, "Error fetching dashboard charts"),
+    res.status(200).json(await getDashboardAnalytics(req));
+  }, "Error fetching dashboard analytics"),
 );
 
 export default router;

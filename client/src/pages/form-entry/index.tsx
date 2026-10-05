@@ -16,6 +16,7 @@ import ActionButton from "@/components/action-button";
 import { useArchive, useCanArchive } from "@/services/useArchive";
 import { apiGet } from "@/services/api";
 import { useNavigate, useSearchParams } from "react-router-dom";
+import { AWAITING_ANY_LEVEL } from "@/lib/entryStatuses";
 
 type FormEntry = {
   id: string;
@@ -110,6 +111,8 @@ const STATUS_FILTER_OPTIONS = [
   { label: "Draft", value: "draft" },
   { label: "Pending Submission", value: "pending" },
   { label: "Returned for Correction", value: "returned" },
+  // Used by the dashboard's "Waiting for your approval" link
+  { label: "Awaiting Approval (any level)", value: AWAITING_ANY_LEVEL },
   { label: "Awaiting 1st Approval", value: "submitted_first" },
   { label: "Awaiting 2nd Approval", value: "approved_first,submitted_second" },
   { label: "Awaiting 3rd Approval", value: "approved_second,submitted_third" },
@@ -129,12 +132,20 @@ const URL_FILTERS = [
   "to",
   "completed_from",
   "completed_to",
+  "returned_from",
+  "returned_to",
 ] as const;
 // Set only by links from other pages; shown as chips with a "Clear" action
 const LINKED_FILTER_LABELS: Record<string, string> = {
   site: "Site",
   area: "Area",
 };
+// Date ranges set by links (the dashboard's charts), also shown as chips
+const LINKED_DATE_RANGES = [
+  { label: "Date", from: "from", to: "to" },
+  { label: "Completed on", from: "completed_from", to: "completed_to" },
+  { label: "Returned on", from: "returned_from", to: "returned_to" },
+] as const;
 
 type FormOption = { id: number; form_name: string };
 
@@ -149,14 +160,14 @@ export default function FormEntries() {
 
   const statusFilter = searchParams.get("status") || "all";
   const formFilter = searchParams.get("form_id") || "all";
-  const dateFrom = searchParams.get("from");
-  const dateTo = searchParams.get("to");
-  // Set by the dashboard's "accomplished per day" chart
-  const completedFrom = searchParams.get("completed_from");
-  const completedTo = searchParams.get("completed_to");
   const linkedFilters = Object.keys(LINKED_FILTER_LABELS)
     .map((key) => ({ key, value: searchParams.get(key) }))
     .filter((f): f is { key: string; value: string } => Boolean(f.value));
+  const linkedRanges = LINKED_DATE_RANGES.map((r) => ({
+    label: r.label,
+    from: searchParams.get(r.from),
+    to: searchParams.get(r.to),
+  })).filter((r) => r.from || r.to);
 
   // One filter changed: update the URL (no new history entry) and go to page 1
   const setFilter = (key: string, value: string | null) => {
@@ -171,10 +182,7 @@ export default function FormEntries() {
     const next = new URLSearchParams(searchParams);
     for (const key of [
       ...Object.keys(LINKED_FILTER_LABELS),
-      "from",
-      "to",
-      "completed_from",
-      "completed_to",
+      ...LINKED_DATE_RANGES.flatMap((r) => [r.from, r.to]),
     ])
       next.delete(key);
     setSearchParams(next, { replace: true });
@@ -320,11 +328,7 @@ export default function FormEntries() {
       />
 
       <div className="bg-white shadow-md p-4 rounded mt-1">
-        {(linkedFilters.length > 0 ||
-          dateFrom ||
-          dateTo ||
-          completedFrom ||
-          completedTo) && (
+        {(linkedFilters.length > 0 || linkedRanges.length > 0) && (
           <div className="mb-3 flex flex-wrap items-center gap-2 text-sm">
             <span className="text-gray-500">Also filtered by:</span>
             {linkedFilters.map((f) => (
@@ -335,19 +339,15 @@ export default function FormEntries() {
                 {LINKED_FILTER_LABELS[f.key]}: {f.value}
               </span>
             ))}
-            {(dateFrom || dateTo) && (
-              <span className="rounded-full border border-gray-200 bg-gray-50 px-3 py-0.5 text-gray-700">
-                Date: {dateFrom ?? "…"} – {dateTo ?? "…"}
+            {linkedRanges.map((r) => (
+              <span
+                key={r.label}
+                className="rounded-full border border-gray-200 bg-gray-50 px-3 py-0.5 text-gray-700"
+              >
+                {r.label}:{" "}
+                {r.from === r.to ? r.from : `${r.from ?? "…"} – ${r.to ?? "…"}`}
               </span>
-            )}
-            {(completedFrom || completedTo) && (
-              <span className="rounded-full border border-gray-200 bg-gray-50 px-3 py-0.5 text-gray-700">
-                Completed on:{" "}
-                {completedFrom === completedTo
-                  ? completedFrom
-                  : `${completedFrom ?? "…"} – ${completedTo ?? "…"}`}
-              </span>
-            )}
+            ))}
             <button
               type="button"
               onClick={clearLinkedFilters}

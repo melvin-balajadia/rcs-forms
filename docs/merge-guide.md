@@ -34,8 +34,8 @@ dev ── feat/report-area-comparison ───────┘        │
 | 7 | `refactor/server-service-layer` | `7478818` | Phase 6 — service layer |
 | 8 | `feat/report-area-comparison` | `49773ea` | Main vs Annex report comparison, loading states |
 | 9 | `feat/dashboard-analytics` | `e9293ec` | Form filter + interactive dashboard, steps 1–2 (includes 1–8) |
-| 10 | `feat/client-improvements` | *(in progress)* | Archive buttons, user archiving (includes a backend endpoint + tests), entry not-found page, client audit fixes, UI fixes (branched from 9) |
-| 11 | `feat/dashboard-widgets` | *(planned)* | Dashboard steps 3–4: to-do widgets, pipeline, turnaround, most-returned (branched from 10) |
+| 10 | `feat/client-improvements` | `bfbf4b4` | Archive buttons, user archiving (includes a backend endpoint + tests), entry not-found page, client audit fixes, UI fixes (branched from 9) |
+| 11 | `feat/dashboard-widgets` | *(in progress)* | Dashboard redesign: one `GET /api/dashboard/analytics` endpoint; forms accomplished per day, approval pipeline, waiting for approval, returned entries, entries per form, most-returned forms, recent form entries (latest 5); accomplished chart as lines; layout by role; old metric tiles removed (branched from 10) |
 
 If a branch gets new commits after this was written (review fixes), its tip
 changes. That's fine; just merge the latest.
