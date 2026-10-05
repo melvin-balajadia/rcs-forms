@@ -1,5 +1,6 @@
 import express from "express";
 import verifyJWT from "../middleware/verifyJWT.js";
+import requireRole, { ADMINS } from "../middleware/requireRole.js";
 import {
   getFilterOptions,
   filterFormEntries,
@@ -13,30 +14,21 @@ import {
 
 const router = express.Router();
 
+// Reports page is admin-only
+router.use(verifyJWT, requireRole(...ADMINS));
+
 // Phase 1: Filtering endpoints
-router.get("/filter-options", verifyJWT, getFilterOptions);
-router.post("/filter-entries", verifyJWT, filterFormEntries);
-router.get("/filter-statistics", verifyJWT, getFilterStatistics);
+router.get("/filter-options", getFilterOptions);
+router.post("/filter-entries", filterFormEntries);
+router.get("/filter-statistics", getFilterStatistics);
 
 // Phase 2: Chart generation endpoints
-router.get(
-  "/forms/:formId/sections-multiple",
-  verifyJWT,
-  getFormSectionsWithMultiple,
-);
-router.post("/generate-overall-average", verifyJWT, generateOverallAverage);
-router.post(
-  "/generate-per-section-average",
-  verifyJWT,
-  generatePerSectionAverage,
-);
-router.post(
-  "/generate-per-question-average",
-  verifyJWT,
-  generatePerQuestionAverage,
-);
+router.get("/forms/:formId/sections-multiple", getFormSectionsWithMultiple);
+router.post("/generate-overall-average", generateOverallAverage);
+router.post("/generate-per-section-average", generatePerSectionAverage);
+router.post("/generate-per-question-average", generatePerQuestionAverage);
 
 // Phase 3: Export
-router.post("/raw-answers", verifyJWT, getRawAnswers);
+router.post("/raw-answers", getRawAnswers);
 
 export default router;

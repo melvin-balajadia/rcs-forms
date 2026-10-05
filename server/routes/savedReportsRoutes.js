@@ -1,5 +1,6 @@
 import express from "express";
 import verifyJWT from "../middleware/verifyJWT.js";
+import requireRole, { ADMINS } from "../middleware/requireRole.js";
 import {
   saveReport,
   getMySavedReports,
@@ -11,11 +12,14 @@ import {
 
 const router = express.Router();
 
-router.post("/save", verifyJWT, saveReport);
-router.get("/my-reports", verifyJWT, getMySavedReports);
-router.get("/:reportId", verifyJWT, getSavedReportById);
-router.put("/:reportId", verifyJWT, updateSavedReport);
-router.delete("/:reportId", verifyJWT, deleteSavedReport);
-router.post("/:reportId/refresh", verifyJWT, refreshSavedReport);
+// Reports page is admin-only
+router.use(verifyJWT, requireRole(...ADMINS));
+
+router.post("/save", saveReport);
+router.get("/my-reports", getMySavedReports);
+router.get("/:reportId", getSavedReportById);
+router.put("/:reportId", updateSavedReport);
+router.delete("/:reportId", deleteSavedReport);
+router.post("/:reportId/refresh", refreshSavedReport);
 
 export default router;

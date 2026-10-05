@@ -1,6 +1,7 @@
 import Users from "../Models/Users.js";
 import bcrypt from "bcrypt";
 import { Op } from "sequelize";
+import { rolesFingerprint } from "../utilities/session.js";
 
 export const createUser = async (req, res) => {
   try {
@@ -224,10 +225,20 @@ export const editUser = async (req, res) => {
       user_username,
     };
 
+    // A role change ends the user's sessions so they log in again with the
+    // new roles (verifyJWT also rejects their current access token)
+    if (
+      user_groups &&
+      rolesFingerprint({ user_groups }) !== rolesFingerprint(user)
+    ) {
+      updateData.user_refreshtoken = null;
+    }
+
     if (user_password && user_password.trim() !== "") {
       const salt = await bcrypt.genSalt(10);
       updateData.user_password = await bcrypt.hash(user_password, salt);
       updateData.user_reset_token = false;
+      updateData.user_refreshtoken = null; // end existing sessions
     }
 
     await user.update(updateData);
@@ -281,6 +292,7 @@ export const resetUserPassword = async (req, res) => {
     await user.update({
       user_password: hashedPassword,
       user_reset_token: false,
+      user_refreshtoken: null, // end existing sessions
     });
 
     return res.status(200).json({

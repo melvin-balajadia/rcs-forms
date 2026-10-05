@@ -211,7 +211,6 @@ export const createFormEntryBuilder = async (req, res) => {
   const t = await sequelize.transaction();
   try {
     const {
-      user_id,
       form_id,
       form_entry_site,
       form_entry_area,
@@ -220,6 +219,8 @@ export const createFormEntryBuilder = async (req, res) => {
       form_entry_status = "pending",
       responses, // [{ form_question_id, form_value, remarks, action_item, sub_values: [] }]
     } = req.body;
+    // The entry always belongs to the logged-in user, never a body-supplied id
+    const user_id = req.user.id;
 
     const validSites = ["Taytay", "Cabuyao", "Plaridel", "Marilao", "Villasis"];
     const validStatuses = [
@@ -416,12 +417,15 @@ export const createFormEntryBuilder = async (req, res) => {
       answers: createdValues,
     });
   } catch (error) {
-    await t.rollback();
+    if (!t.finished) await t.rollback();
     console.error("Error in createFormEntryBuilder:", error);
     res.status(500).json({
       message: "Error creating form entry with answers",
       error: error.message,
     });
+  } finally {
+    // Early returns above skip rollback; never leave a transaction open
+    if (!t.finished) await t.rollback();
   }
 };
 
@@ -475,7 +479,6 @@ export const updateFormEntryBuilder = async (req, res) => {
   try {
     const {
       form_entry_id,
-      user_id,
       form_id,
       form_entry_site,
       form_entry_area,
@@ -484,6 +487,8 @@ export const updateFormEntryBuilder = async (req, res) => {
       form_entry_status = "draft",
       responses, // [{ form_question_id, form_value, remarks, action_item, sub_values: [] }]
     } = req.body;
+    // Ownership is checked against the logged-in user, never a body-supplied id
+    const user_id = req.user.id;
 
     const validSites = ["Taytay", "Cabuyao", "Plaridel", "Marilao", "Villasis"];
     const validStatuses = [
@@ -721,22 +726,26 @@ export const updateFormEntryBuilder = async (req, res) => {
       answers: updatedValues,
     });
   } catch (error) {
-    await t.rollback();
+    if (!t.finished) await t.rollback();
     console.error("Error updating form entry:", error);
     res.status(500).json({
       message: "Error updating form entry",
       error: error.message,
     });
+  } finally {
+    // Early returns above skip rollback; never leave a transaction open
+    if (!t.finished) await t.rollback();
   }
 };
 
 export const submitForApproval = async (req, res) => {
   try {
-    const { form_entry_id, user_id } = req.body;
+    const { form_entry_id } = req.body;
+    const user_id = req.user.id;
 
-    if (!form_entry_id || !user_id) {
+    if (!form_entry_id) {
       return res.status(400).json({
-        message: "form_entry_id and user_id are required",
+        message: "form_entry_id is required",
       });
     }
 
@@ -824,7 +833,9 @@ export const submitForApproval = async (req, res) => {
 export const approveFormEntry = async (req, res) => {
   const t = await sequelize.transaction();
   try {
-    const { form_entry_id, approver_id, action, remarks } = req.body;
+    const { form_entry_id, action, remarks } = req.body;
+    // The approver is always the logged-in user, never a body-supplied id
+    const approver_id = req.user.id;
 
     // Validate action
     if (!["approve", "reject"].includes(action)) {
@@ -969,12 +980,15 @@ export const approveFormEntry = async (req, res) => {
       },
     });
   } catch (error) {
-    await t.rollback();
+    if (!t.finished) await t.rollback();
     console.error("Error in approveFormEntry:", error);
     res.status(500).json({
       message: "Error processing approval",
       error: error.message,
     });
+  } finally {
+    // Early returns above skip rollback; never leave a transaction open
+    if (!t.finished) await t.rollback();
   }
 };
 
@@ -1258,12 +1272,14 @@ export const getApprovalHistory = async (req, res) => {
 export const returnFormEntry = async (req, res) => {
   const t = await sequelize.transaction();
   try {
-    const { form_entry_id, returner_id, remarks } = req.body;
+    const { form_entry_id, remarks } = req.body;
+    // The returner is always the logged-in user, never a body-supplied id
+    const returner_id = req.user.id;
 
     // Validate inputs
-    if (!form_entry_id || !returner_id) {
+    if (!form_entry_id) {
       return res.status(400).json({
-        message: "form_entry_id and returner_id are required",
+        message: "form_entry_id is required",
       });
     }
 
@@ -1402,11 +1418,14 @@ export const returnFormEntry = async (req, res) => {
       },
     });
   } catch (error) {
-    await t.rollback();
+    if (!t.finished) await t.rollback();
     console.error("Error in returnFormEntry:", error);
     res.status(500).json({
       message: "Error returning form entry",
       error: error.message,
     });
+  } finally {
+    // Early returns above skip rollback; never leave a transaction open
+    if (!t.finished) await t.rollback();
   }
 };

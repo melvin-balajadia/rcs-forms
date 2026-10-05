@@ -1,5 +1,6 @@
 import express from "express";
 import verifyJWT from "../middleware/verifyJWT.js";
+import requireRole, { ADMINS } from "../middleware/requireRole.js";
 
 import {
   getClients,
@@ -12,11 +13,14 @@ import {
 
 const router = express.Router();
 
-router.get("/all", verifyJWT, getClients);
-router.post("/create", verifyJWT, createClients);
-router.get("/get/:id", verifyJWT, getClientsById);
-router.put("/update/:id", verifyJWT, updateClients);
-router.put("/archive/:id", verifyJWT, archiveClients);
-router.get("/pagination", verifyJWT, clientsPagination);
+// Clients page is admin-only
+router.use(verifyJWT, requireRole(...ADMINS));
+
+router.get("/all", getClients);
+router.post("/create", createClients);
+router.get("/get/:id", getClientsById);
+router.put("/update/:id", updateClients);
+router.put("/archive/:id", archiveClients);
+router.get("/pagination", clientsPagination);
 
 export default router;
