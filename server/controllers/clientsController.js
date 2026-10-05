@@ -1,5 +1,6 @@
 import Clients from "../Models/Clients.js";
 import { Op } from "sequelize";
+import { getPagination } from "../utilities/pagination.js";
 
 export const getClients = async (req, res) => {
   try {
@@ -104,9 +105,7 @@ export const archiveClients = async (req, res) => {
 export const clientsPagination = async (req, res) => {
   try {
     // Pagination Params
-    const page = parseInt(req.query.page) || 1;
-    const pageSize = parseInt(req.query.pageSize) || 10;
-    const offset = (page - 1) * pageSize;
+    const { page, pageSize, offset } = getPagination(req.query);
 
     // Filter Params
     const { id, name, site, from, to } = req.query;

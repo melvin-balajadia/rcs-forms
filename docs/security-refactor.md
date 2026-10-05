@@ -20,7 +20,7 @@ what changed, why, and how it was verified. Updated at the end of every phase.
 | 2 — Approval workflow integrity | `refactor/approval-workflow-integrity` | ✅ Done |
 | 3 — Object-level access | `refactor/object-level-access` | ✅ Done |
 | 4 — Auth hardening | `refactor/auth-hardening` | ✅ Done |
-| 5 — Input validation and errors | `refactor/input-validation-errors` | Planned |
+| 5 — Input validation and errors | `refactor/input-validation-errors` | ✅ Done |
 | 6 — Service layer | `refactor/server-service-layer` | Planned |
 
 ## Pending operations
@@ -47,6 +47,8 @@ what changed, why, and how it was verified. Updated at the end of every phase.
 | Password reset or role change by an admin | Ends that user's sessions; they log in again. |
 | Deleting forms, entries, clients, rooms, saved reports | Never deletes data. "Delete" means **archive**: the archive status is set to 1 and the record disappears from forms, form entries, reports, clients and rooms. Only `qfd_admin` and `all_access` can archive. |
 | Saved reports | Shared: every admin sees every saved report. Only the creator can edit or refresh one; any admin can archive one. |
+| Database migrations | Keep `sequelize.sync({ alter: true })` for now. Switch to migrations (Sequelize stays) as a separate step **after `feat/report-area-comparison` is merged**, because that branch relies on `alter` to create its two new columns. |
+| Report size | At most 10,000 entries per report request for now. The real fix (aggregate in the database, send filters instead of id lists) is part of Phase 6. |
 | Automated tests in CI | Not yet. Tests run locally with `npm test`; adding `- run: npm test` to `.github/workflows/ci.yml` is a later decision. |
 
 ---
@@ -476,14 +478,80 @@ the "keeps working" ones:
 
 Result: **589 tests passing**.
 
-## Phase 5 — Input validation and errors *(planned)*
+## Phase 5 — Input validation and errors
 
-- Validate request bodies and queries with `zod`; cap `pageSize`, dashboard
-  `limit` and report `entry_ids`.
-- One error handler returning a generic message, with details logged on the
-  server only.
-- Replace `sequelize.sync({ alter: true })` with migrations.
-- Fix the rooms search crash (`Op` is never imported).
+**Branch:** `refactor/input-validation-errors` (from `refactor/auth-hardening`)
+
+### Problems fixed
+
+1. **Request bodies weren't type-checked.** A string where a list belongs, an
+   object where an id belongs, or an absurdly long value reached Sequelize
+   directly and failed as a database error or a crash.
+2. **Lists had no size limit.** `?pageSize=100000` loaded the whole table, and
+   so did the dashboard's `?limit=`.
+3. **Report requests had no size limit**, and the default 100 KB body limit
+   made large reports fail with an unclear error at roughly 15,000 entries.
+4. **Server errors sent internals to the browser.** 37+ handlers answered 500
+   with the raw error object (Sequelize errors include the SQL), one with a
+   stack trace, and the global error handler sent `err.toString()`.
+5. **Nested query strings** (`?site[gt]=x`, which Express parses into objects)
+   flowed into where-clauses.
+6. **Rooms search crashed**: `Op` was used without being imported.
+
+### Changes
+
+- **`validate(schema)` middleware** (`middleware/validate.js`) and **zod
+  schemas** (`validation/schemas.js`) on 26 routes that take structured input:
+  auth, users, form-entry create/update/submit/approve/return, approver
+  assignments, the form builder, reports, saved reports, clients and rooms.
+  - Schemas check **types and sizes** only and let extra fields through, so
+    the client can keep sending fields the server ignores. Ids may be numbers
+    or numeric strings (`<select>` values).
+  - "Required field" messages stay in the controllers, which already word them
+    for the UI ("Enter your username and password", …).
+  - A mismatch answers `400` with a readable `message` (e.g. `Invalid
+    responses: Expected array, received string`) plus an `errors` list.
+- **Size limits:**
+
+  | What | Limit |
+  |---|---|
+  | `pageSize` on lists (`utilities/pagination.js`) | 1–100 (the UI's tables offer up to 100) |
+  | `pageSize` on the user list | up to 1,000 (the Forms page loads it whole to pick approvers) |
+  | Dashboard recent entries `limit` | 1–50 |
+  | Entries per report request (`entry_ids`) | 10,000, with "this report covers too many entries … Narrow the date range or filters." |
+  | JSON request body | 1 MB (raised from 100 KB so a full 10,000-entry report fits) |
+
+- **No internals on server errors.** One guard in `app.js` rewrites every
+  `5xx` JSON response to its human-readable `message` only (plus
+  `ErrorMessage`/`ErrorState` for the pages that read those), and logs the
+  original on the server. The global error handler answers a generic message;
+  invalid JSON and oversized bodies get clear 400/413 messages.
+- **Nested query parameters** are refused with `400 Invalid query parameter: …`.
+- **Rooms search** imports `Op`.
+
+### Not in this phase
+
+- **Migrations** — moved to after the feature branch merge (see
+  [Decisions](#decisions) and [Migrations](#migrations-after-merging-featreport-area-comparison)).
+- **Reports at scale** — capped now; rewritten in Phase 6.
+
+### Tests
+
+`tests/validation.test.js` (25 tests):
+
+- wrong types refused with a readable 400 (login, entry responses, ids,
+  roles, approver ids, over-long names);
+- real client payloads still accepted (string ids, extra fields), and missing
+  fields keep the controller's message;
+- report cap on all four report endpoints and on saving (10,001 refused,
+  10,000 accepted);
+- list caps (forms 100, users 1,000, dashboard 50, garbage values → defaults);
+- nested query refused;
+- a database error inside a handler and an uncaught error both answer without
+  internals; invalid JSON → 400, over 1 MB → 413;
+- rooms search with filters works.
+
+Result: **614 tests passing**.
 
 ## Phase 6 — Service layer *(planned)*
 
@@ -492,6 +560,44 @@ Result: **589 tests passing**.
   helpers.
 - Convert manual transactions to managed ones
   (`sequelize.transaction(async (t) => …)`), moved here from Phase 2.
+- **Reports at scale.** `form_question_values` (the EAV answers table) is
+  expected to grow large. Today the report endpoints load every matching
+  answer row into the API's memory and count them in JavaScript, and the
+  browser sends the full list of entry ids. Rewrite them to:
+  - aggregate in the database (`COUNT … GROUP BY`), so memory stays flat;
+  - take the filters (form, site, area, dates) instead of id lists, so the
+    10,000-entry cap from Phase 5 can go.
+
+  These functions overlap `feat/report-area-comparison`, so do this after
+  that branch is merged.
+
+## Migrations (after merging `feat/report-area-comparison`)
+
+Replace `sequelize.sync({ alter: true })` with Sequelize migrations
+(`sequelize-cli` or `umzug`). **Sequelize itself stays**; only the way schema
+changes are applied changes.
+
+Why: `alter` runs on every server start, compares every model to its table
+and issues `ALTER TABLE` wherever they differ.
+
+- On a large table like `form_question_values`, that can lock it for minutes
+  during startup.
+- Removing a field from a model can drop the column and its data.
+- There's no history, so each database can drift.
+
+Migrations run each change once, when it's deployed, and are kept in git.
+
+Plan:
+
+1. Merge `feat/report-area-comparison` first (it relies on `alter` to create
+   `saved_reports.compare_area` and `saved_report_data.area_label`).
+2. Add a baseline migration that matches the current schema, and mark it as
+   already applied on every existing database (Marilao and Taytay, test and
+   prod).
+3. Add the first real migration: a composite index on
+   `form_question_values (form_entry_id, form_question_id)` for the reports.
+4. Change startup to run pending migrations instead of `sync({ alter: true })`.
+5. Write step-by-step deploy notes for each site.
 - Leads into the feature refactor.
 
 ---

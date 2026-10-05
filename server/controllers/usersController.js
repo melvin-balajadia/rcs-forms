@@ -6,6 +6,7 @@ import {
   isStrongPassword,
   PASSWORD_RULE_MESSAGE,
 } from "../utilities/passwordPolicy.js";
+import { getPagination } from "../utilities/pagination.js";
 
 export const createUser = async (req, res) => {
   try {
@@ -355,9 +356,7 @@ export const getUserById = async (req, res) => {
 export const usersPagination = async (req, res) => {
   try {
     // Pagination Params
-    const page = parseInt(req.query.page) || 1;
-    const pageSize = parseInt(req.query.pageSize) || 10;
-    const offset = (page - 1) * pageSize;
+    const { page, pageSize, offset } = getPagination(req.query, { maxPageSize: 1000 });
 
     // Filter Params
     const {

@@ -10,16 +10,20 @@ import {
   archiveRooms,
   roomsPagination,
 } from "../controllers/roomsController.js";
+import { validate } from "../middleware/validate.js";
+import {
+  roomSchema,
+} from "../validation/schemas.js";
 
 const router = express.Router();
 
 // Rooms page is admin-only
 router.use(verifyJWT, requireRole(...ADMINS));
 
-router.post("/create", createRooms);
+router.post("/create", validate(roomSchema), createRooms);
 router.get("/all", getRooms);
 router.get("/get/:id", getRoomsById);
-router.put("/update/:id", updateRooms);
+router.put("/update/:id", validate(roomSchema), updateRooms);
 router.put("/archive/:id", archiveRooms);
 router.get("/pagination", roomsPagination);
 

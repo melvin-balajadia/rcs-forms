@@ -14,6 +14,7 @@ import {
   findVisibleEntry,
 } from "../utilities/formEntryVisibility.js";
 import { CREATE_STATUSES, canEditTo } from "../utilities/entryStatus.js";
+import { getPagination } from "../utilities/pagination.js";
 
 // ✅ Cross-checks a form's required questions/sub-questions against the
 // submitted responses, returning the text of any that are missing/blank.
@@ -117,9 +118,7 @@ export const archiveFormEntry = async (req, res) => {
 export const formEntriesPagination = async (req, res) => {
   try {
     // Pagination Params
-    const page = parseInt(req.query.page) || 1;
-    const pageSize = parseInt(req.query.pageSize) || 10;
-    const offset = (page - 1) * pageSize;
+    const { page, pageSize, offset } = getPagination(req.query);
 
     // Filter Params
     const { id, user_id, form_id, site, area, from, to, status } = req.query;

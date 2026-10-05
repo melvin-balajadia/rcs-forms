@@ -8,6 +8,11 @@ import {
 } from "../controllers/formApproversController.js";
 import verifyJWT from "../middleware/verifyJWT.js";
 import requireRole, { ADMINS, hasRole } from "../middleware/requireRole.js";
+import { validate } from "../middleware/validate.js";
+import {
+  userApprovalsSchema,
+  formApproversSchema,
+} from "../validation/schemas.js";
 
 const router = express.Router();
 
@@ -21,9 +26,9 @@ const selfOrAdmin = (req, res, next) => {
 };
 
 router.get("/user/:userId", selfOrAdmin, getFormApproversByUser);
-router.put("/user/:userId", requireRole("all_access"), updateUserFormApprovals);
+router.put("/user/:userId", requireRole("all_access"), validate(userApprovalsSchema), updateUserFormApprovals);
 router.get("/form/:formId", requireRole(...ADMINS), getApproversByForm);
-router.put("/form/:formId", requireRole(...ADMINS), updateFormApprovers);
+router.put("/form/:formId", requireRole(...ADMINS), validate(formApproversSchema), updateFormApprovers);
 router.get(
   "/can-approve/:formEntryId/:userId",
   selfOrAdmin,
