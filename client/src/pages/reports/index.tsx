@@ -4,6 +4,7 @@ import PageTable from "@/components/comp-485";
 import { LuFileChartColumnIncreasing } from "react-icons/lu";
 import { Checkbox } from "@/components/ui/checkbox";
 import ActionButton from "@/components/action-button";
+import { useArchive, useCanArchive } from "@/services/useArchive";
 import type { ColumnDef } from "@tanstack/react-table";
 import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
@@ -36,6 +37,9 @@ const chartTypeLabel: Record<string, string> = {
 
 export default function Reports() {
   const navigate = useNavigate();
+  // Archive (qfd_admin / all_access only): row menu and bulk "Archive selected"
+  const canArchive = useCanArchive();
+  const archive = useArchive("savedReport");
   const [pageIndex, setPageIndex] = useState(0);
   const [pageSize, setPageSize] = useState(10);
 
@@ -99,7 +103,19 @@ export default function Reports() {
     {
       id: "actions",
       header: () => <span className="sr-only">Actions</span>,
-      cell: ({ row }) => <ActionButton row={row as any} basePath="/reports" />,
+      cell: ({ row }) => (
+        <ActionButton
+          row={row as any}
+          basePath="/reports"
+          // Saved reports have no edit page — only Details and Archive
+          showEdit={false}
+          archive={
+            canArchive
+              ? { name: row.original.report_name, onConfirm: () => archive([row.original.id]) }
+              : undefined
+          }
+        />
+      ),
       enableHiding: false,
     },
   ];
@@ -138,6 +154,10 @@ export default function Reports() {
           </div>
         ) : (
           <PageTable<Report>
+            onArchiveSelected={
+              canArchive ? (rows) => archive(rows.map((r) => r.id)) : undefined
+            }
+            itemNoun={{ one: "report", many: "reports" }}
             data={paginatedData}
             columns={columns}
             manualPagination

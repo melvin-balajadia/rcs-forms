@@ -8,6 +8,7 @@ import {
   getUserById,
   editUser,
   resetUserPassword,
+  archiveUser,
 } from "../controllers/usersController.js";
 import { validate } from "../middleware/validate.js";
 import {
@@ -31,5 +32,7 @@ router.post("/create", requireRole("all_access"), validate(userSchema), createUs
 router.get("/get/:id", requireRole("all_access"), getUserById);
 router.put("/edit/:id", requireRole("all_access"), validate(userSchema), editUser);
 router.put("/reset-password/:id", requireRole("all_access"), validate(adminResetPasswordSchema), resetUserPassword);
+// Archive only — users are never deleted
+router.put("/archive/:id", requireRole("all_access"), archiveUser);
 
 export default router;

@@ -415,7 +415,7 @@ export default function CreateForm() {
           {section.questions.map((question, questionIndex) => (
             <div key={questionIndex} className="space-y-2">
               {/* Main Question Row */}
-              <div className="flex items-center gap-3 mt-2 w-full">
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-2 mt-2 w-full">
                 <input
                   type="text"
                   placeholder="Question"
@@ -427,61 +427,65 @@ export default function CreateForm() {
                     ].text = e.target.value;
                     setSections(updatedSections);
                   }}
-                  className="flex-1 text-gray-800 border-b border-gray-200 focus:outline-none focus:border-primary pb-1"
+                  className="min-w-[10rem] flex-1 text-gray-800 border-b border-gray-200 focus:outline-none focus:border-primary pb-1"
                 />
 
-                <Dropdown
-                  variant="dropdownMain"
-                  value={question.type}
-                  onChange={(val: string) => {
-                    const updatedSections = [...sections];
-                    updatedSections[sectionIndex].questions[
-                      questionIndex
-                    ].type = val;
-                    if (val !== "dropdown") {
-                      updatedSections[sectionIndex].questions[
-                        questionIndex
-                      ].choices = [];
-                    }
-                    setSections(updatedSections);
-                  }}
-                  options={questionTypeOptions}
-                />
-
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    className="text-gray-800 hover:text-gray-600"
-                    onClick={() =>
-                      handleAddSubQuestion(sectionIndex, questionIndex)
-                    }
-                  >
-                    <LuCirclePlus className="text-lg" />
-                  </button>
-                  <button
-                    onClick={() =>
-                      handleDeleteQuestion(sectionIndex, questionIndex)
-                    }
-                    className="text-red-500 hover:text-red-700"
-                  >
-                    <LuTrash2 className="text-lg" />
-                  </button>
-                </div>
-
-                <span className="text-gray-300">|</span>
-
-                <div className="flex items-center gap-2">
-                  <span className="text-sm text-gray-600">Required</span>
-                  <Switch
-                    checked={question.required}
-                    onCheckedChange={(checked) => {
+                {/* Controls stay together and move below the text when the row is narrow;
+                    on a phone they wrap too, so Required gets its own line */}
+                <div className="ml-auto flex max-w-full flex-wrap items-center justify-end gap-x-3 gap-y-2">
+                  <Dropdown
+                    variant="dropdownMain"
+                    value={question.type}
+                    onChange={(val: string) => {
                       const updatedSections = [...sections];
                       updatedSections[sectionIndex].questions[
                         questionIndex
-                      ].required = checked;
+                      ].type = val;
+                      if (val !== "dropdown") {
+                        updatedSections[sectionIndex].questions[
+                          questionIndex
+                        ].choices = [];
+                      }
                       setSections(updatedSections);
                     }}
+                    options={questionTypeOptions}
                   />
+  
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      className="text-gray-800 hover:text-gray-600"
+                      onClick={() =>
+                        handleAddSubQuestion(sectionIndex, questionIndex)
+                      }
+                    >
+                      <LuCirclePlus className="text-lg" />
+                    </button>
+                    <button
+                      onClick={() =>
+                        handleDeleteQuestion(sectionIndex, questionIndex)
+                      }
+                      className="text-red-500 hover:text-red-700"
+                    >
+                      <LuTrash2 className="text-lg" />
+                    </button>
+                  </div>
+  
+                  <span className="hidden text-gray-300 sm:inline">|</span>
+  
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm text-gray-600">Required</span>
+                    <Switch
+                      checked={question.required}
+                      onCheckedChange={(checked) => {
+                        const updatedSections = [...sections];
+                        updatedSections[sectionIndex].questions[
+                          questionIndex
+                        ].required = checked;
+                        setSections(updatedSections);
+                      }}
+                    />
+                  </div>
                 </div>
               </div>
 
@@ -505,7 +509,7 @@ export default function CreateForm() {
               <div className="ml-10 space-y-2 border-l-2 border-gray-200 pl-4">
                 {question.subQuestions.map((subQ, subIndex) => (
                   <div key={subIndex} className="space-y-1">
-                    <div className="flex items-center gap-3 w-full">
+                    <div className="flex flex-wrap items-center gap-x-3 gap-y-2 w-full">
                       <input
                         type="text"
                         placeholder="Sub Question"
@@ -517,52 +521,56 @@ export default function CreateForm() {
                           ].subQuestions[subIndex].text = e.target.value;
                           setSections(updatedSections);
                         }}
-                        className="flex-1 text-gray-700 border-b border-gray-200 focus:outline-none focus:border-primary pb-1"
+                        className="min-w-[10rem] flex-1 text-gray-700 border-b border-gray-200 focus:outline-none focus:border-primary pb-1"
                       />
 
-                      <Dropdown
-                        variant="dropdownMain"
-                        value={subQ.type}
-                        onChange={(val: string) => {
-                          const updatedSections = [...sections];
-                          updatedSections[sectionIndex].questions[
-                            questionIndex
-                          ].subQuestions[subIndex].type = val;
-                          if (val !== "dropdown") {
-                            updatedSections[sectionIndex].questions[
-                              questionIndex
-                            ].subQuestions[subIndex].choices = [];
-                          }
-                          setSections(updatedSections);
-                        }}
-                        options={questionTypeOptions}
-                      />
-
-                      <button
-                        onClick={() =>
-                          handleDeleteSubQuestion(
-                            sectionIndex,
-                            questionIndex,
-                            subIndex,
-                          )
-                        }
-                        className="text-red-500 hover:text-red-700"
-                      >
-                        <LuTrash2 className="text-lg" />
-                      </button>
-
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm text-gray-600">Required</span>
-                        <Switch
-                          checked={subQ.required}
-                          onCheckedChange={(checked) => {
+                      {/* Controls stay together and move below the text when the row is narrow;
+                    on a phone they wrap too, so Required gets its own line */}
+                      <div className="ml-auto flex max-w-full flex-wrap items-center justify-end gap-x-3 gap-y-2">
+                        <Dropdown
+                          variant="dropdownMain"
+                          value={subQ.type}
+                          onChange={(val: string) => {
                             const updatedSections = [...sections];
                             updatedSections[sectionIndex].questions[
                               questionIndex
-                            ].subQuestions[subIndex].required = checked;
+                            ].subQuestions[subIndex].type = val;
+                            if (val !== "dropdown") {
+                              updatedSections[sectionIndex].questions[
+                                questionIndex
+                              ].subQuestions[subIndex].choices = [];
+                            }
                             setSections(updatedSections);
                           }}
+                          options={questionTypeOptions}
                         />
+  
+                        <button
+                          onClick={() =>
+                            handleDeleteSubQuestion(
+                              sectionIndex,
+                              questionIndex,
+                              subIndex,
+                            )
+                          }
+                          className="text-red-500 hover:text-red-700"
+                        >
+                          <LuTrash2 className="text-lg" />
+                        </button>
+  
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm text-gray-600">Required</span>
+                          <Switch
+                            checked={subQ.required}
+                            onCheckedChange={(checked) => {
+                              const updatedSections = [...sections];
+                              updatedSections[sectionIndex].questions[
+                                questionIndex
+                              ].subQuestions[subIndex].required = checked;
+                              setSections(updatedSections);
+                            }}
+                          />
+                        </div>
                       </div>
                     </div>
 

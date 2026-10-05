@@ -25,6 +25,18 @@ api.interceptors.request.use(
   (error) => Promise.reject(error)
 );
 
+// Errors reach page code that often logs them whole (console.error(err)), and
+// an Axios error carries the request: its Authorization header (the bearer
+// token) and its body (e.g. a password). Strip both before handing it on.
+const redact = (error: unknown) => {
+  const config = (error as AxiosError)?.config;
+  if (config) {
+    if (config.headers) delete config.headers.Authorization;
+    if (config.data !== undefined) config.data = "[redacted]";
+  }
+  return error;
+};
+
 // 🔹 Response interceptor: auto-refresh on 401
 api.interceptors.response.use(
   (response) => response,
@@ -67,12 +79,12 @@ api.interceptors.response.use(
         // account). Reload on the login page so no stale user state remains.
         clearAuthToken();
         window.location.replace("/login");
-        return Promise.reject(refreshError);
+        return Promise.reject(redact(refreshError));
       }
     }
 
-    // ✅ Case 3: All other errors → propagate
-    return Promise.reject(error);
+    // ✅ Case 3: All other errors → propagate (without token or body)
+    return Promise.reject(redact(error));
   }
 );
 

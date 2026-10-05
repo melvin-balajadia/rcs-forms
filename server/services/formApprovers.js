@@ -152,7 +152,7 @@ export const setFormApprovers = async (formId, assignments) => {
   for (const level of LEVELS) {
     for (const userId of assignments[level]) {
       const user = await Users.findByPk(userId);
-      if (!user || !hasAnyRole(user, APPROVER_ROLES)) {
+      if (!user || user.user_archivestatus || !hasAnyRole(user, APPROVER_ROLES)) {
         fail(400, `User ${userId} is not eligible to be an approver.`);
       }
     }

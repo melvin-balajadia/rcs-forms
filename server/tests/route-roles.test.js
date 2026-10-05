@@ -89,6 +89,7 @@ const MATRIX = [
   ["get", "/api/users/get/1", IT_ONLY],
   ["put", "/api/users/edit/1", IT_ONLY],
   ["put", "/api/users/reset-password/1", IT_ONLY],
+  ["put", "/api/users/archive/999", IT_ONLY],
 
   // Standalone EAV endpoints (UI uses the builder endpoints instead)
   ["get", "/api/questions/all", ADMINS],

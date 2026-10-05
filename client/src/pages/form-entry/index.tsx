@@ -13,6 +13,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import ActionButton from "@/components/action-button";
+import { useArchive, useCanArchive } from "@/services/useArchive";
 import { apiGet } from "@/services/api";
 import { useNavigate, useSearchParams } from "react-router-dom";
 
@@ -139,6 +140,9 @@ type FormOption = { id: number; form_name: string };
 
 export default function FormEntries() {
   const navigate = useNavigate();
+  // Archive (qfd_admin / all_access only): row menu and bulk "Archive selected"
+  const canArchive = useCanArchive();
+  const archive = useArchive("formEntry");
   const [searchParams, setSearchParams] = useSearchParams();
   const [pageIndex, setPageIndex] = useState(0);
   const [pageSize, setPageSize] = useState(10);
@@ -290,7 +294,17 @@ export default function FormEntries() {
     {
       id: "actions",
       header: "Actions", // ✅ Changed from sr-only to visible header
-      cell: ({ row }) => <ActionButton row={row} basePath="/form-entry" />,
+      cell: ({ row }) => (
+        <ActionButton
+          row={row}
+          basePath="/form-entry"
+          archive={
+            canArchive
+              ? { name: `Entry #${row.original.id}`, onConfirm: () => archive([row.original.id]) }
+              : undefined
+          }
+        />
+      ),
       enableHiding: false,
     },
   ];
@@ -357,6 +371,10 @@ export default function FormEntries() {
             aria-busy={isFetching}
           >
             <PageTable<FormEntry>
+              onArchiveSelected={
+                canArchive ? (rows) => archive(rows.map((r) => r.id)) : undefined
+              }
+              itemNoun={{ one: "entry", many: "entries" }}
               data={data?.entries ?? []}
               columns={columns}
               manualPagination
